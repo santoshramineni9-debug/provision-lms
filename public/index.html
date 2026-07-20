@@ -2,8 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Student LMS - Learning Management System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Provision LMS - Learning Management System</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4361ee">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Provision LMS">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -146,21 +152,37 @@ function initApp() {
     if (!navItems.find(p => p.id === 'account')) navItems.push({ id: 'account', label: currentUser.first_name, icon: '&#9881;' });
   }
   renderNav();
+  if (deferredPrompt && currentUser.role === 'student') {
+    var ib = document.getElementById('installBtn');
+    if (ib) ib.style.display = 'flex';
+  }
   showPage(navItems[0].id);
 }
 
 function renderNav() {
   const nav = document.getElementById('topnav');
-  nav.innerHTML = navItems.map(n => `<a class="nav-link" data-page="${n.id}" onclick="showPage('${n.id}')">${n.icon} ${n.label}</a>`).join('') + `<a class="nav-link nav-right" onclick="logout()">Logout</a>`;
+  nav.innerHTML = `<button id="installBtn" onclick="installApp()" style="display:none;background:#4361ee;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;align-self:center">&#11015; Install App</button>` + navItems.map(n => `<a class="nav-link" data-page="${n.id}" onclick="showPage('${n.id}')">${n.icon} ${n.label}</a>`).join('') + `<a class="nav-link nav-right" onclick="logout()">Logout</a>`;
 }
 
 function showPage(pageId) {
   if (typeof cleanupYtRestrictions === 'function') cleanupYtRestrictions();
   if (currentUser && currentUser.role === 'student' && currentUser.page_access && currentUser.page_access !== '*') {
     const allowed = currentUser.page_access.split(',');
-    if (!allowed.includes(pageId) && pageId !== 'onboarding' && pageId !== 'logout') {
-      showToast('Access denied. Contact admin to enable this page.', 'error');
-      return;
+    const subPages = {
+      'course-detail': ['my-courses', 'catalog'],
+      'lesson-player': ['my-courses'],
+      'youtube-player': ['my-courses', 'catalog'],
+      'take-quiz': ['my-quizzes'],
+      'quiz-results': ['my-quizzes'],
+      'onboarding': ['my-courses', 'catalog', 'my-quizzes', 'my-invoices', 'account']
+    };
+    if (subPages[pageId]) {
+      const parents = subPages[pageId];
+      if (!parents.some(p => allowed.includes(p))) {
+        showToast('Access denied', 'error'); return;
+      }
+    } else if (!allowed.includes(pageId) && pageId !== 'logout') {
+      showToast('Access denied', 'error'); return;
     }
   }
   document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.page === pageId));
@@ -377,14 +399,14 @@ async function renderCourseDetail(el) {
                 });
                 const safeTitle = (t) => t.replace(/'/g, '').replace(/"/g, '');
                 return Object.keys(grouped).map(bn => {
-                  return '<div class="batch-section"><div class="batch-header" style="background:#e8f5e9"><b>&#127909; Batch ' + bn + ' - YouTube Links</b> <span class="muted">' + grouped[bn].length + ' link(s)</span></div><div class="batch-videos" style="flex-direction:column">' + grouped[bn].map(lnk => '<div class="batch-video-item" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f0f0f0"><span style="background:#c62828;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700">YT</span><button class="btn btn-sm btn-success" onclick="playYouTube(\'' + lnk.youtube_id + '\',\'' + courseId + '\',\'' + safeTitle(lnk.title) + '\')">&#9654; ' + lnk.title + '</button><span class="muted" style="font-size:10px">' + (lnk.duration || '') + '</span>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatchLink(\'' + lnk.link_id + '\',\'' + courseId + '\')">Del</button>' : '') + '</div>').join('') + '</div></div>';
+                  return '<div class="batch-section"><div class="batch-header" style="background:#e8f5e9"><b>&#127909; Batch ' + bn + ' - YouTube Links</b> <span class="muted">' + grouped[bn].length + ' link(s)</span></div><div class="batch-videos" style="flex-direction:column">' + grouped[bn].map((lnk, idx) => '<div class="batch-video-item" style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0"><span style="background:#888;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;min-width:16px;text-align:center">' + (idx + 1) + '</span><div style="flex:1"><button class="btn btn-sm btn-success" onclick="playYouTube(\'' + lnk.youtube_id + '\',\'' + courseId + '\',\'' + safeTitle(lnk.title) + '\')">&#9654; ' + lnk.title + '</button>' + (lnk.description ? '<div style="font-size:10px;color:#666;margin-top:2px">' + lnk.description + '</div>' : '') + '<div style="font-size:10px;color:#999;margin-top:1px">' + (lnk.duration || '') + ' | Sort: ' + (lnk.sort_order || (idx + 1)) + '</div></div>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatchLink(\'' + lnk.link_id + '\',\'' + courseId + '\')">Del</button>' : '') + '</div>').join('') + '</div></div>';
                 }).join('');
               })() : ''}
               ${l.batches && l.batches.length ? l.batches.map(b => {
                 const batchLinks = (l.links || []).filter(lnk => lnk.batch_number === b.batch_number);
                 const batchVids = l.videos.filter(v => v.batch_number === b.batch_number);
                 const safeTitle2 = (t) => t.replace(/'/g, '').replace(/"/g, '');
-                return '<div class="batch-section"><div class="batch-header"><b>' + b.batch_name + '</b> <span class="muted">' + batchVids.length + ' video(s) | ' + batchLinks.length + ' link(s)</span>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatch(\'' + b.batch_id + '\',\'' + courseId + '\')">Del Batch</button>' : '') + '</div>' + (batchLinks.length ? '<div style="padding:4px 10px;background:#f8fff8">' + batchLinks.map(lnk => '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #e8f5e9"><span style="background:#c62828;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700">YT</span><button class="btn btn-sm btn-success" onclick="playYouTube(\'' + lnk.youtube_id + '\',\'' + courseId + '\',\'' + safeTitle2(lnk.title) + '\')">&#9654; ' + lnk.title + '</button>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatchLink(\'' + lnk.link_id + '\',\'' + courseId + '\')">Del</button>' : '') + '</div>').join('') + '</div>' : '') + '<div class="batch-videos">' + batchVids.map(v => '<div class="batch-video-item"><button class="btn btn-sm btn-success" onclick="playVideo(\'' + v.video_id + '\',\'' + courseId + '\')">&#9654; ' + v.title + '</button></div>').join('') + '</div></div>';
+                return '<div class="batch-section"><div class="batch-header"><b>' + b.batch_name + '</b> <span class="muted">' + batchVids.length + ' video(s) | ' + batchLinks.length + ' link(s)</span>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatch(\'' + b.batch_id + '\',\'' + courseId + '\')">Del Batch</button>' : '') + '</div>' + (batchLinks.length ? '<div style="padding:4px 10px;background:#f8fff8">' + batchLinks.map((lnk, idx) => '<div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid #e8f5e9"><span style="background:#888;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;min-width:16px;text-align:center">' + (idx + 1) + '</span><div style="flex:1"><button class="btn btn-sm btn-success" onclick="playYouTube(\'' + lnk.youtube_id + '\',\'' + courseId + '\',\'' + safeTitle2(lnk.title) + '\')">&#9654; ' + lnk.title + '</button>' + (lnk.description ? '<div style="font-size:10px;color:#666;margin-top:2px">' + lnk.description + '</div>' : '') + '<div style="font-size:10px;color:#999;margin-top:1px">' + (lnk.duration || '') + '</div></div>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatchLink(\'' + lnk.link_id + '\',\'' + courseId + '\')">Del</button>' : '') + '</div>').join('') + '</div>' : '') + '<div class="batch-videos">' + batchVids.map(v => '<div class="batch-video-item"><button class="btn btn-sm btn-success" onclick="playVideo(\'' + v.video_id + '\',\'' + courseId + '\')">&#9654; ' + v.title + '</button></div>').join('') + '</div></div>';
               }).join('') : ''}
               ${l.videos.filter(v => !v.batch_number || v.batch_number === 0).length ? `
                 <div class="batch-section">
@@ -593,6 +615,10 @@ function showAddYouTubeLink(lessonId, courseId, nextBatchNum) {
           <div class="form-group"><label>Duration (optional)</label><input id="ytDuration" placeholder="e.g. 45:30"></div>
         </div>
         <div class="form-group" style="margin-top:8px">
+          <label>Description</label>
+          <input id="ytDescription" placeholder="Brief description of this video" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;font-size:11px">
+        </div>
+        <div class="form-group" style="margin-top:8px">
           <label>YouTube URL or Video ID *</label>
           <input id="ytUrl" placeholder="https://www.youtube.com/watch?v=... or youtu.be/... or just video ID" style="width:100%;padding:6px;border:2px solid #c62828;border-radius:4px;font-size:11px">
         </div>
@@ -623,9 +649,10 @@ async function saveYouTubeLink(lessonId, courseId) {
   const url = document.getElementById('ytUrl').value.trim();
   const batchNum = parseInt(document.getElementById('ytBatchNum').value) || 1;
   const duration = document.getElementById('ytDuration').value.trim();
+  const description = document.getElementById('ytDescription') ? document.getElementById('ytDescription').value.trim() : '';
   if (!title) { showToast('Title required', 'error'); return; }
   if (!url) { showToast('YouTube URL required', 'error'); return; }
-  const res = await fetch(API + '/api/batch-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lesson_id: lessonId, batch_number: batchNum, title, youtube_url: url, duration }) });
+  const res = await fetch(API + '/api/batch-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lesson_id: lessonId, batch_number: batchNum, title, youtube_url: url, duration, description }) });
   const data = await res.json();
   if (data.error) { showToast(data.error, 'error'); return; }
   document.getElementById('ytUrl').value = '';
@@ -660,7 +687,7 @@ async function renderYouTubePlayer(el) {
     </div>
     <div class="yt-restricted-player" style="position:relative;border-radius:6px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.2);background:#000">
       <div id="ytPlayerWrapper" style="position:relative;padding-bottom:50%;height:0;overflow:hidden">
-        <iframe id="ytFrame" src="https://www.youtube.com/embed/${yid}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&controls=0&disablekb=1&fs=0&playsinline=1&cc_load_policy=0&origin=${encodeURIComponent(location.origin)}" style="position:absolute;top:-5%;left:0;width:100%;height:112%;border:0" allow="autoplay; encrypted-media; gyroscope"></iframe>
+        <iframe id="ytFrame" src="https://www.youtube.com/embed/${yid}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&controls=1&disablekb=1&fs=0&playsinline=1&cc_load_policy=0&origin=${encodeURIComponent(location.origin)}" style="position:absolute;top:-5%;left:0;width:100%;height:112%;border:0" allow="autoplay; encrypted-media; gyroscope"></iframe>
         <div style="position:absolute;top:0;left:0;right:0;height:6px;background:#c62828;z-index:11;pointer-events:none"></div>
         <div style="position:absolute;bottom:0;left:0;right:0;height:16%;background:#000;z-index:11;pointer-events:none"></div>
         <div style="position:absolute;top:0;left:0;right:0;height:8%;background:#000;z-index:11;pointer-events:none"></div>
@@ -1150,7 +1177,13 @@ async function renderMyCourses(el) {
         <div class="course-card-meta">Enrolled: ${e.enrolled_at}</div>
         <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${e.progress_pct}%"></div></div>
         <div class="muted" style="margin-top:4px">${e.progress_pct}% complete</div>
-      </div>`).join('')}</div>` : '<p class="muted">No courses yet. <a href="#" onclick="showPage(\'catalog\')">Browse catalog</a></p>'}`;
+      </div>`).join('')}</div>` : `
+      <div style="text-align:center;padding:60px 20px;background:#f8f9fa;border-radius:8px;border:2px dashed #ddd">
+        <div style="font-size:48px;margin-bottom:12px">&#128218;</div>
+        <h3 style="color:#333;margin:0">No Courses Yet</h3>
+        <p style="color:#666;font-size:13px;margin:8px 0 16px">You haven't enrolled in any courses yet. Browse our catalog to find courses that interest you.</p>
+        <button class="btn btn-primary" onclick="showPage('catalog')" style="padding:8px 20px;font-size:13px">&#128269; Browse Catalog</button>
+      </div>`}`;
 }
 
 // ===== CATALOG (Student) =====
@@ -1291,7 +1324,7 @@ window.playOnboardVideo = function(idx) {
   area.innerHTML = `
     <div style="position:relative;border-radius:8px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.15);background:#000">
       <div style="position:relative;padding-bottom:50%;height:0;overflow:hidden">
-        <iframe id="onboardFrame" src="https://www.youtube.com/embed/${v.youtube_id}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&controls=0&disablekb=1&fs=0&playsinline=1" style="position:absolute;top:-5%;left:0;width:100%;height:112%;border:0" allow="autoplay; encrypted-media; gyroscope"></iframe>
+        <iframe id="onboardFrame" src="https://www.youtube.com/embed/${v.youtube_id}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&controls=1&disablekb=1&fs=0&playsinline=1" style="position:absolute;top:-5%;left:0;width:100%;height:112%;border:0" allow="autoplay; encrypted-media; gyroscope"></iframe>
         <div style="position:absolute;top:0;left:0;right:0;height:8%;background:#000;z-index:11;pointer-events:none"></div>
         <div style="position:absolute;bottom:0;left:0;right:0;height:16%;background:#000;z-index:11;pointer-events:none"></div>
       </div>
@@ -1439,9 +1472,37 @@ function renderAccount(el) {
         <div class="info-row"><span class="label">Email:</span> ${currentUser.email}</div>
         <div class="info-row"><span class="label">Role:</span> <span class="badge badge-${currentUser.role}">${currentUser.role}</span></div>
         <div class="info-row"><span class="label">ID:</span> ${currentUser.user_id}</div>
+        <div style="margin-top:15px;padding-top:12px;border-top:1px solid #eee">
+          <button onclick="installApp()" style="background:#4361ee;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">&#11015; Install App on Phone</button>
+          <div style="margin-top:6px;color:#888;font-size:10px">Add to your home screen for quick access</div>
+        </div>
       </div>
     </div>`;
 }
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (currentUser && currentUser.role === 'student') {
+    const btn = document.getElementById('installBtn');
+    if (btn) btn.style.display = 'flex';
+  }
+});
+function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(r => {
+    deferredPrompt = null;
+    const btn = document.getElementById('installBtn');
+    if (btn) btn.style.display = 'none';
+  });
+}
+window.addEventListener('appinstalled', () => { deferredPrompt = null; });
 </script>
 </body>
 </html>

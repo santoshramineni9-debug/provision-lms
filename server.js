@@ -328,26 +328,26 @@ app.get('/api/batch-links', (req, res) => {
 });
 
 app.post('/api/batch-links', (req, res) => {
-  const { lesson_id, batch_number, title, youtube_url, duration } = req.body;
+  const { lesson_id, batch_number, title, youtube_url, duration, description } = req.body;
   if (!lesson_id || !youtube_url || !title) return res.status(400).json({ error: 'lesson_id, title, youtube_url required' });
   const youtubeId = extractYouTubeId(youtube_url);
   if (!youtubeId) return res.status(400).json({ error: 'Invalid YouTube URL. Use: youtube.com/watch?v=..., youtu.be/..., or video ID directly' });
   const linkId = lid2();
   const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM batch_links WHERE lesson_id = ? AND batch_number = ?').get(lesson_id, batch_number || 1);
   const sortOrder = (maxOrder?.m || 0) + 1;
-  db.prepare('INSERT INTO batch_links (link_id, lesson_id, batch_number, title, youtube_url, youtube_id, duration, sort_order) VALUES (?,?,?,?,?,?,?,?)').run(linkId, lesson_id, batch_number || 1, title, youtube_url, youtubeId, duration || '', sortOrder);
+  db.prepare('INSERT INTO batch_links (link_id, lesson_id, batch_number, title, description, youtube_url, youtube_id, duration, sort_order) VALUES (?,?,?,?,?,?,?,?,?)').run(linkId, lesson_id, batch_number || 1, title, description || '', youtube_url, youtubeId, duration || '', sortOrder);
   saveDB();
   res.json({ link_id: linkId, youtube_id: youtubeId, message: 'Link added' });
 });
 
 app.put('/api/batch-links/:linkId', (req, res) => {
-  const { title, youtube_url, duration, sort_order } = req.body;
+  const { title, youtube_url, duration, sort_order, description } = req.body;
   let youtubeId = null;
   if (youtube_url) {
     youtubeId = extractYouTubeId(youtube_url);
     if (!youtubeId) return res.status(400).json({ error: 'Invalid YouTube URL' });
   }
-  db.prepare('UPDATE batch_links SET title=COALESCE(?,title), youtube_url=COALESCE(?,youtube_url), youtube_id=COALESCE(?,youtube_id), duration=COALESCE(?,duration), sort_order=COALESCE(?,sort_order) WHERE link_id=?').run(title, youtube_url, youtubeId, duration, sort_order, req.params.linkId);
+  db.prepare('UPDATE batch_links SET title=COALESCE(?,title), description=COALESCE(?,description), youtube_url=COALESCE(?,youtube_url), youtube_id=COALESCE(?,youtube_id), duration=COALESCE(?,duration), sort_order=COALESCE(?,sort_order) WHERE link_id=?').run(title, description, youtube_url, youtubeId, duration, sort_order, req.params.linkId);
   saveDB();
   res.json({ message: 'Updated' });
 });
@@ -730,6 +730,7 @@ async function start() {
   try { db.prepare("ALTER TABLE users ADD COLUMN onboarding_watched INTEGER DEFAULT 0").run(); } catch(e) {}
   try { db.prepare("ALTER TABLE users ADD COLUMN onboarding_video_url TEXT").run(); } catch(e) {}
   try { db.prepare("ALTER TABLE users ADD COLUMN page_access TEXT DEFAULT '*'").run(); } catch(e) {}
+  try { db.prepare("ALTER TABLE batch_links ADD COLUMN description TEXT").run(); } catch(e) {}
   // Onboarding settings table
   db.prepare(`CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
