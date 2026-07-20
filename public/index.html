@@ -117,7 +117,7 @@ function initApp() {
     });
   }
   if (currentUser.role === 'student' && !currentUser.onboarding_watched) {
-    showPage('onboarding');
+    showPage('my-courses');
     return;
   }
   if (currentUser.role === 'admin' || currentUser.role === 'instructor') {
@@ -1246,122 +1246,104 @@ function filterMyInvoices() {
 
 // ===== ONBOARDING =====
 async function renderOnboarding(el) {
-  el.innerHTML = '<div class="loading">Loading onboarding video...</div>';
-  const vidRes = await fetch(API + '/api/onboarding/video');
-  const vidData = await vidRes.json();
-  const yid = vidData.youtube_id;
-  let watchedTime = 0;
+  el.innerHTML = '<div class="loading">Loading training videos...</div>';
+  const videos = await (await fetch(API + '/api/onboarding/videos')).json();
   el.innerHTML = `
-    <div style="max-width:800px;margin:0 auto;padding:20px 0">
+    <div style="max-width:900px;margin:0 auto;padding:20px 0">
       <div style="text-align:center;margin-bottom:16px">
-        <div style="font-size:28px;font-weight:800;color:#1a237e">&#128218; Welcome to LMS</div>
-        <p style="color:#666;font-size:13px;margin-top:6px">Please watch this training video before you begin</p>
+        <div style="font-size:24px;font-weight:800;color:#1a237e">&#128218; Welcome, ${currentUser.first_name}!</div>
+        <p style="color:#666;font-size:12px;margin-top:4px">Click any video below to start learning</p>
       </div>
-      <div style="position:relative;border-radius:8px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.15);background:#000">
-        <div style="position:relative;padding-bottom:50%;height:0;overflow:hidden">
-          <iframe id="onboardFrame" src="https://www.youtube.com/embed/${yid}?autoplay=0&rel=0&modestbranding=1&iv_load_policy=3&controls=0&disablekb=1&fs=0&playsinline=1" style="position:absolute;top:-5%;left:0;width:100%;height:112%;border:0" allow="autoplay; encrypted-media; gyroscope" allowfullscreen="false"></iframe>
-          <div style="position:absolute;top:0;left:0;right:0;height:8%;background:#000;z-index:11;pointer-events:none"></div>
-          <div style="position:absolute;bottom:0;left:0;right:0;height:16%;background:#000;z-index:11;pointer-events:none"></div>
-        </div>
-        <div id="onboardControls" style="background:#1a1a1a;padding:8px 12px;display:flex;align-items:center;gap:10px;justify-content:center">
-          <button onclick="onboardSkip(-10)" style="background:#333;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:13px" title="Rewind 10s">&#8634; 10s</button>
-          <button id="onboardPlayBtn" onclick="onboardTogglePlay()" style="background:#1a237e;color:#fff;border:none;border-radius:4px;padding:6px 18px;cursor:pointer;font-size:13px;font-weight:600">&#9654; Play</button>
-          <button onclick="onboardSkip(10)" style="background:#333;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:13px" title="Forward 10s">10s &#8635;</button>
-          <span id="onboardTimeLabel" style="color:#aaa;font-size:11px;margin-left:8px">0:00 / 0:00</span>
-        </div>
-      </div>
-      <div style="margin-top:12px;background:#fff3e0;border:1px solid #ff9800;border-radius:6px;padding:12px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:20px">&#9203;</span>
-          <div>
-            <b style="color:#e65100">Watch the full video to continue</b>
-            <p style="font-size:11px;color:#666;margin-top:2px">The "Continue" button will appear after you watch most of the video</p>
+      <div id="onboardPlayerArea" style="display:none;margin-bottom:16px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${videos.map((v, i) => `
+          <div onclick="playOnboardVideo(${i})" style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:10px;cursor:pointer;transition:box-shadow .2s" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.15)'" onmouseout="this.style.boxShadow='none'">
+            <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:4px;background:#000">
+              <img src="https://img.youtube.com/vi/${v.youtube_id}/mqdefault.jpg" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover" onerror="this.src='https://via.placeholder.com/320x180?text=Video'">
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;background:rgba(0,0,0,.7);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px">&#9654;</div>
+            </div>
+            <div style="margin-top:6px">
+              <b style="font-size:12px;color:#333">${v.title}</b>
+              <div style="font-size:10px;color:#888;margin-top:2px">Click to watch</div>
+            </div>
           </div>
-          <div id="onboardTimer" style="margin-left:auto;font-size:12px;color:#666"></div>
-        </div>
-        <div id="onboardProgress" style="margin-top:8px;height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden">
-          <div id="onboardProgressFill" style="height:100%;width:0%;background:#ff9800;border-radius:2px;transition:width 1s"></div>
-        </div>
+        `).join('')}
       </div>
-      <div id="onboardActions" style="text-align:center;margin-top:16px">
-        <span id="onboardWaitMsg" style="color:#888;font-size:12px">Please watch the video... (${currentUser.first_name})</span>
+      <div style="text-align:center;margin-top:16px">
+        <button class="btn btn-primary" onclick="completeOnboarding()" style="padding:8px 24px;font-size:12px">&#10003; I've watched the videos — Continue</button>
       </div>
     </div>`;
   
+  window._onboardVideos = videos;
   document.addEventListener('contextmenu', window._ytBlockCtx = (e) => { e.preventDefault(); return false; });
   document.addEventListener('keydown', window._ytBlockKey = (e) => {
+    if (e.key === 'F12') { e.preventDefault(); return false; }
     if (e.key === 'c' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
     if (e.key === 'u' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
-    if (e.key === 'F12') { e.preventDefault(); return false; }
   });
+}
 
-  let totalDuration = 0;
-  let currentTime = 0;
-  let isPlaying = false;
-  let ytReady = false;
+window.playOnboardVideo = function(idx) {
+  const v = window._onboardVideos[idx];
+  if (!v) return;
+  const area = document.getElementById('onboardPlayerArea');
+  area.style.display = 'block';
+  area.innerHTML = `
+    <div style="position:relative;border-radius:8px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.15);background:#000">
+      <div style="position:relative;padding-bottom:50%;height:0;overflow:hidden">
+        <iframe id="onboardFrame" src="https://www.youtube.com/embed/${v.youtube_id}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&controls=0&disablekb=1&fs=0&playsinline=1" style="position:absolute;top:-5%;left:0;width:100%;height:112%;border:0" allow="autoplay; encrypted-media; gyroscope"></iframe>
+        <div style="position:absolute;top:0;left:0;right:0;height:8%;background:#000;z-index:11;pointer-events:none"></div>
+        <div style="position:absolute;bottom:0;left:0;right:0;height:16%;background:#000;z-index:11;pointer-events:none"></div>
+      </div>
+      <div style="background:#1a1a1a;padding:8px 12px;display:flex;align-items:center;gap:8px;justify-content:center">
+        <button onclick="onboardSkip(-10)" style="background:#333;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px" title="Rewind 10s">&#8634; 10s</button>
+        <button id="onboardPlayBtn" onclick="onboardTogglePlay()" style="background:#1a237e;color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;font-size:12px;font-weight:600">&#9654; Play</button>
+        <button onclick="onboardSkip(10)" style="background:#333;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px" title="Forward 10s">10s &#8635;</button>
+        <span id="onboardTimeLabel" style="color:#aaa;font-size:11px;margin-left:6px">0:00 / 0:00</span>
+      </div>
+      <div style="background:#111;padding:4px 12px;text-align:center"><span style="color:#888;font-size:10px">${v.title}</span></div>
+    </div>`;
+  area.scrollIntoView({ behavior: 'smooth' });
+
+  let totalDuration = 0, currentTime = 0, isPlaying = false;
 
   function ytPostMsg(func, args) {
-    const iframe = document.getElementById('onboardFrame');
-    if (!iframe || !iframe.contentWindow) return;
-    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args || [] }), '*');
-  }
-
-  function ytListen() {
-    window.addEventListener('message', window._onboardMsg = (e) => {
-      try {
-        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if (d.event === 'infoDelivery' && d.info) {
-          if (d.info.duration) { totalDuration = d.info.duration; ytReady = true; }
-          if (d.info.currentTime !== undefined) currentTime = d.info.currentTime;
-          if (d.info.playerState === 1) isPlaying = true;
-          if (d.info.playerState === 2) isPlaying = false;
-          if (d.info.playerState === 0) isPlaying = false;
-          updatePlayBtn();
-        }
-        if (d.event === 'onReady') { ytReady = true; }
-      } catch(e) {}
-    });
-    try {
-      const iframe = document.getElementById('onboardFrame');
-      if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'onboardFrame' }), '*');
-        iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onReady'] }), '*');
-        iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['infoDelivery'] }), '*');
-      }
-    } catch(e) {}
+    const f = document.getElementById('onboardFrame');
+    if (f && f.contentWindow) f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args || [] }), '*');
   }
 
   window.onboardTogglePlay = function() {
-    if (isPlaying) { ytPostMsg('pauseVideo'); } else { ytPostMsg('playVideo'); }
+    if (isPlaying) ytPostMsg('pauseVideo'); else ytPostMsg('playVideo');
   };
   window.onboardSkip = function(seconds) {
-    const cur = currentTime || 0;
-    ytPostMsg('seekTo', [cur + seconds, true]);
+    ytPostMsg('seekTo', [(currentTime || 0) + seconds, true]);
   };
   function updatePlayBtn() {
     const btn = document.getElementById('onboardPlayBtn');
     if (btn) btn.innerHTML = isPlaying ? '&#10074;&#10074; Pause' : '&#9654; Play';
   }
-
-  ytListen();
-
-  const timerInterval = setInterval(() => {
-    const tl = document.getElementById('onboardTimeLabel');
-    if (tl && totalDuration > 0) tl.textContent = fmtTime(currentTime) + ' / ' + fmtTime(totalDuration);
-    if (totalDuration > 0) {
-      const pct = Math.min(100, Math.round((currentTime / (totalDuration * 0.75)) * 100));
-      const fill = document.getElementById('onboardProgressFill');
-      if (fill) fill.style.width = pct + '%';
-      const timer = document.getElementById('onboardTimer');
-      if (timer) timer.textContent = Math.round(currentTime) + 's / ~' + Math.round(totalDuration * 0.75) + 's';
-      if (pct >= 100) {
-        clearInterval(timerInterval);
-        const actions = document.getElementById('onboardActions');
-        if (actions) actions.innerHTML = `<button class="btn btn-primary" style="font-size:14px;padding:10px 30px" onclick="completeOnboarding()">&#10003; Continue to Dashboard</button>`;
-      }
-    }
-  }, 1000);
   function fmtTime(s) { const m = Math.floor(s/60); const sec = Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; }
+
+  window._onboardMsg = function(e) {
+    try {
+      const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+      if (d.event === 'infoDelivery' && d.info) {
+        if (d.info.duration) totalDuration = d.info.duration;
+        if (d.info.currentTime !== undefined) currentTime = d.info.currentTime;
+        if (d.info.playerState === 1) { isPlaying = true; updatePlayBtn(); }
+        if (d.info.playerState === 2) { isPlaying = false; updatePlayBtn(); }
+        if (d.info.playerState === 0) { isPlaying = false; updatePlayBtn(); }
+        const tl = document.getElementById('onboardTimeLabel');
+        if (tl && totalDuration > 0) tl.textContent = fmtTime(currentTime) + ' / ' + fmtTime(totalDuration);
+      }
+    } catch(e) {}
+  };
+  window.addEventListener('message', window._onboardMsg);
+
+  setTimeout(() => {
+    const f = document.getElementById('onboardFrame');
+    if (f && f.contentWindow) f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'onboardFrame' }), '*');
+  }, 1000);
 }
 
 async function completeOnboarding() {

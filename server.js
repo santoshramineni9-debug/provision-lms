@@ -660,26 +660,27 @@ app.get('/api/reports/dues', (req, res) => {
 });
 
 // ========== ONBOARDING ==========
-app.get('/api/onboarding/video', (req, res) => {
-  const setting = db.prepare("SELECT value FROM settings WHERE key = 'onboarding_video_url'").get();
-  const url = setting ? setting.value : 'https://www.youtube.com/watch?v=E3B12pGWBUg';
-  res.json({ url, youtube_id: extractYouTubeId(url) || 'E3B12pGWBUg' });
+app.get('/api/onboarding/videos', (req, res) => {
+  const setting = db.prepare("SELECT value FROM settings WHERE key = 'onboarding_videos'").get();
+  const single = db.prepare("SELECT value FROM settings WHERE key = 'onboarding_video_url'").get();
+  if (setting && setting.value) {
+    try { res.json(JSON.parse(setting.value)); return; } catch(e) {}
+  }
+  const url = single ? single.value : 'https://www.youtube.com/watch?v=E3B12pGWBUg';
+  res.json([{ title: 'Introduction to LMS', url: url, youtube_id: extractYouTubeId(url) || 'E3B12pGWBUg' }]);
 });
 
-app.post('/api/onboarding/video', (req, res) => {
+app.post('/api/onboarding/videos', (req, res) => {
   if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-  const { url } = req.body;
-  const ytId = extractYouTubeId(url);
-  if (!ytId) return res.status(400).json({ error: 'Invalid YouTube URL' });
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('onboarding_video_url', ?)").run(url);
+  const { videos } = req.body;
+  if (!Array.isArray(videos)) return res.status(400).json({ error: 'videos array required' });
+  const cleaned = videos.map(v => {
+    const ytId = extractYouTubeId(v.url);
+    return { title: v.title || 'Untitled', url: v.url, youtube_id: ytId || null };
+  }).filter(v => v.youtube_id);
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('onboarding_videos', ?)").run(JSON.stringify(cleaned));
   saveDB();
-  res.json({ message: 'Onboarding video updated', youtube_id: ytId });
-});
-
-app.get('/api/onboarding/status', (req, res) => {
-  const { user_id } = req.query;
-  const user = db.prepare('SELECT onboarding_watched FROM users WHERE id = ?').get(user_id);
-  res.json({ watched: user ? !!user.onboarding_watched : false });
+  res.json({ message: 'Onboarding videos updated', count: cleaned.length });
 });
 
 app.post('/api/onboarding/complete', (req, res) => {
