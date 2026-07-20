@@ -1,16 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1a237e"/>
-      <stop offset="100%" stop-color="#4361ee"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d47a1"/>
+      <stop offset="50%" stop-color="#1565c0"/>
+      <stop offset="100%" stop-color="#1a237e"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4caf50"/>
+      <stop offset="100%" stop-color="#2e7d32"/>
     </linearGradient>
   </defs>
+  <!-- Background -->
   <rect width="512" height="512" rx="96" fill="url(#bg)"/>
   <!-- Healthcare Cross -->
-  <rect x="210" y="100" width="92" height="240" rx="16" fill="white"/>
-  <rect x="136" y="174" width="240" height="92" rx="16" fill="white"/>
+  <rect x="195" y="80" width="122" height="200" rx="18" fill="white" opacity="0.95"/>
+  <rect x="106" y="150" width="300" height="122" rx="18" fill="white" opacity="0.95"/>
   <!-- Heart -->
-  <path d="M256 340 C256 340, 180 300, 180 270 C180 248, 200 234, 220 234 C236 234, 248 244, 256 256 C264 244, 276 234, 292 234 C312 234, 332 248, 332 270 C332 300, 256 340, 256 340Z" fill="#ff3355"/>
-  <!-- LMS Text -->
-  <text x="256" y="440" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="72" fill="white">LMS</text>
+  <path d="M256 310 C256 310, 170 268, 170 230 C170 205, 192 188, 216 188 C236 188, 250 200, 256 214 C262 200, 276 188, 296 188 C320 188, 342 205, 342 230 C342 268, 256 310, 256 310Z" fill="url(#green)"/>
+  <!-- PROVISION text -->
+  <text x="256" y="410" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="56" fill="white" letter-spacing="4">PROVISION</text>
+  <!-- LMS subtitle -->
+  <text x="256" y="460" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="40" fill="#4caf50" letter-spacing="6">L M S</text>
+  <!-- Decorative dots -->
+  <circle cx="420" cy="60" r="6" fill="#4caf50" opacity="0.6"/>
+  <circle cx="445" cy="60" r="4" fill="#4caf50" opacity="0.4"/>
+  <circle cx="465" cy="60" r="3" fill="#4caf50" opacity="0.3"/>
 </svg>
