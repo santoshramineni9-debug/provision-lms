@@ -1508,6 +1508,17 @@ function installApp() {
   overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
 }
 window.addEventListener('appinstalled', () => { deferredPrompt = null; });
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.type === 'UPDATED') {
+      var bar = document.createElement('div');
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#4361ee;color:#fff;padding:12px;text-align:center;z-index:99999;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+      bar.textContent = 'New version available - Tap to refresh';
+      bar.onclick = () => { navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({type:'SKIP_WAITING'}); location.reload(); };
+      document.body.appendChild(bar);
+    }
+  });
+}
 </script>
 </body>
 </html>

@@ -1,13 +1,6 @@
-const CACHE = 'provision-lms-v1';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/css/style.css',
-  '/manifest.json'
-];
+const CACHE = 'provision-lms-v2';
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
   self.skipWaiting();
 });
 
@@ -18,17 +11,22 @@ self.addEventListener('activate', e => {
     ))
   );
   self.clients.claim();
+  self.clients.matchAll().then(clients => {
+    clients.forEach(c => c.postMessage({ type: 'UPDATED' }));
+  });
 });
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (e.request.url.includes('/api/')) {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match('/index.html'))
-    );
+    e.respondWith(fetch(e.request).catch(() => caches.match('/index.html')));
     return;
   }
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    fetch(e.request).then(r => {
+      const clone = r.clone();
+      caches.open(CACHE).then(c => c.put(e.request, clone));
+      return r;
+    }).catch(() => caches.match(e.request))
   );
 });
