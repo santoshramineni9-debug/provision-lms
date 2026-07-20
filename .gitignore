@@ -1,0 +1,4 @@
+node_modules/
+lms.db
+uploads/
+startup.log

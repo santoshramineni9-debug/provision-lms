@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student LMS - Learning Management System</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-box">
+      <div class="login-logo">LMS</div>
+      <h2>Student Learning Management System</h2>
+      <div class="login-form">
+        <input type="email" id="loginEmail" placeholder="Email" value="admin@lms.com">
+        <input type="password" id="loginPassword" placeholder="Password" value="admin123">
+        <button class="btn btn-primary" onclick="doLogin()">Sign In</button>
+        <div class="login-links">
+          <a href="#" onclick="showRegister()">Create Account</a>
+        </div>
+        <div id="loginError" class="error-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="registerOverlay" class="login-overlay" style="display:none">
+    <div class="login-box">
+      <div class="login-logo">LMS</div>
+      <h2>Create Student Account</h2>
+      <div class="login-form">
+        <input type="text" id="regFirst" placeholder="First Name">
+        <input type="text" id="regLast" placeholder="Last Name">
+        <input type="email" id="regEmail" placeholder="Email">
+        <input type="password" id="regPassword" placeholder="Password">
+        <input type="tel" id="regPhone" placeholder="Phone (optional)">
+        <button class="btn btn-primary" onclick="doRegister()">Register</button>
+        <div class="login-links">
+          <a href="#" onclick="showLogin()">Already have an account? Sign In</a>
+        </div>
+        <div id="regError" class="error-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mainApp" style="display:none">
+    <nav class="topnav" id="topnav"></nav>
+    <div class="main-content" id="mainContent"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const API = '';
+let currentUser = null;
+let navItems = [];
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || 'success');
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ===== AUTH =====
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value;
+  const pw = document.getElementById('loginPassword').value;
+  try {
+    const res = await fetch(API + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw }) });
+    const data = await res.json();
+    if (data.error) { document.getElementById('loginError').textContent = data.error; return; }
+    currentUser = data;
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    initApp();
+  } catch(e) { document.getElementById('loginError').textContent = 'Connection error'; }
+}
+
+async function doRegister() {
+  const data = {
+    first_name: document.getElementById('regFirst').value,
+    last_name: document.getElementById('regLast').value,
+    email: document.getElementById('regEmail').value,
+    password: document.getElementById('regPassword').value,
+    phone: document.getElementById('regPhone').value
+  };
+  try {
+    const res = await fetch(API + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const r = await res.json();
+    if (r.error) { document.getElementById('regError').textContent = r.error; return; }
+    currentUser = r;
+    document.getElementById('registerOverlay').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    initApp();
+  } catch(e) { document.getElementById('regError').textContent = 'Connection error'; }
+}
+
+function showRegister() { document.getElementById('loginOverlay').style.display = 'none'; document.getElementById('registerOverlay').style.display = 'flex'; }
+function showLogin() { document.getElementById('registerOverlay').style.display = 'none'; document.getElementById('loginOverlay').style.display = 'flex'; }
+
+function logout() { currentUser = null; document.getElementById('mainApp').style.display = 'none'; document.getElementById('loginOverlay').style.display = 'flex'; }
+
+// ===== APP INIT =====
+function initApp() {
+  if (currentUser && currentUser.role === 'student') {
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'F12') { e.preventDefault(); return false; }
+      if (e.key === 'c' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+      if (e.key === 'u' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+      if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+      if (e.key === 'i' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+      if (e.key === 'j' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+      if (e.key === 'p' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+    });
+  }
+  if (currentUser.role === 'student' && !currentUser.onboarding_watched) {
+    showPage('onboarding');
+    return;
+  }
+  if (currentUser.role === 'admin' || currentUser.role === 'instructor') {
+    navItems = [
+      { id: 'dashboard', label: 'Dashboard', icon: '&#9632;' },
+      { id: 'courses', label: 'Courses', icon: '&#9654;' },
+      { id: 'categories', label: 'Categories', icon: '&#9776;' },
+      { id: 'quizzes', label: 'Quizzes', icon: '&#9998;' },
+      { id: 'students', label: 'Students', icon: '&#9787;' },
+      { id: 'enrollments', label: 'Enrollments', icon: '&#9733;' },
+      { id: 'invoices', label: 'Invoices', icon: '&#128179;' },
+      { id: 'report-enrollments', label: 'Enroll Report', icon: '&#9783;' },
+      { id: 'report-dues', label: 'Dues Report', icon: '&#9878;' },
+      { id: 'account', label: currentUser.first_name, icon: '&#9881;' }
+    ];
+  } else {
+    const allowed = currentUser.page_access && currentUser.page_access !== '*' ? currentUser.page_access.split(',') : null;
+    const allStudentPages = [
+      { id: 'my-courses', label: 'My Courses', icon: '&#9654;' },
+      { id: 'catalog', label: 'Browse Catalog', icon: '&#9776;' },
+      { id: 'my-quizzes', label: 'My Quizzes', icon: '&#9998;' },
+      { id: 'my-invoices', label: 'My Invoices', icon: '&#128179;' },
+      { id: 'account', label: currentUser.first_name, icon: '&#9881;' }
+    ];
+    navItems = allowed ? allStudentPages.filter(p => allowed.includes(p.id)) : allStudentPages;
+    if (!navItems.find(p => p.id === 'account')) navItems.push({ id: 'account', label: currentUser.first_name, icon: '&#9881;' });
+  }
+  renderNav();
+  showPage(navItems[0].id);
+}
+
+function renderNav() {
+  const nav = document.getElementById('topnav');
+  nav.innerHTML = navItems.map(n => `<a class="nav-link" data-page="${n.id}" onclick="showPage('${n.id}')">${n.icon} ${n.label}</a>`).join('') + `<a class="nav-link nav-right" onclick="logout()">Logout</a>`;
+}
+
+function showPage(pageId) {
+  if (typeof cleanupYtRestrictions === 'function') cleanupYtRestrictions();
+  if (currentUser && currentUser.role === 'student' && currentUser.page_access && currentUser.page_access !== '*') {
+    const allowed = currentUser.page_access.split(',');
+    if (!allowed.includes(pageId) && pageId !== 'onboarding' && pageId !== 'logout') {
+      showToast('Access denied. Contact admin to enable this page.', 'error');
+      return;
+    }
+  }
+  document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.page === pageId));
+  const content = document.getElementById('mainContent');
+  switch(pageId) {
+    case 'dashboard': renderAdminDashboard(content); break;
+    case 'courses': renderAdminCourses(content); break;
+    case 'categories': renderCategories(content); break;
+    case 'quizzes': renderAdminQuizzes(content); break;
+    case 'students': renderStudents(content); break;
+    case 'enrollments': renderEnrollments(content); break;
+    case 'report-enrollments': renderEnrollmentReport(content); break;
+    case 'report-dues': renderDuesReport(content); break;
+    case 'my-courses': renderMyCourses(content); break;
+    case 'catalog': renderCatalog(content); break;
+    case 'my-quizzes': renderMyQuizzes(content); break;
+    case 'invoices': renderInvoices(content); break;
+    case 'my-invoices': renderMyInvoices(content); break;
+    case 'account': renderAccount(content); break;
+    case 'course-detail': renderCourseDetail(content); break;
+    case 'onboarding': renderOnboarding(content); break;
+    case 'lesson-player': renderLessonPlayer(content); break;
+    case 'youtube-player': renderYouTubePlayer(content); break;
+    case 'take-quiz': renderTakeQuiz(content); break;
+    case 'quiz-results': renderQuizResults(content); break;
+    default: content.innerHTML = '<p>Page not found</p>';
+  }
+}
+
+let _pageData = {};
+let ytCurTime = 0, ytTotalDur = 0, ytIsPlaying = false;
+
+// ===== ADMIN DASHBOARD =====
+async function renderAdminDashboard(el) {
+  el.innerHTML = '<div class="loading">Loading dashboard...</div>';
+  const stats = await (await fetch(API + '/api/stats')).json();
+  el.innerHTML = `
+    <h2 class="page-title">Admin Dashboard</h2>
+    <div class="stats-grid">
+      <div class="stat-card" style="border-left:4px solid #1a237e"><div class="stat-num">${stats.totalStudents}</div><div class="stat-label">Students</div></div>
+      <div class="stat-card" style="border-left:4px solid #2e7d32"><div class="stat-num">${stats.totalCourses}</div><div class="stat-label">Courses</div></div>
+      <div class="stat-card" style="border-left:4px solid #e65100"><div class="stat-num">${stats.totalVideos}</div><div class="stat-label">Videos</div></div>
+      <div class="stat-card" style="border-left:4px solid #7b1fa2"><div class="stat-num">${stats.totalEnrollments}</div><div class="stat-label">Enrollments</div></div>
+      <div class="stat-card" style="border-left:4px solid #00838f"><div class="stat-num">${stats.totalQuizzes}</div><div class="stat-label">Quizzes</div></div>
+    </div>
+    <div class="grid-2" style="margin-top:16px">
+      <div class="card">
+        <div class="card-header">Recent Enrollments</div>
+        <div class="card-body">
+          ${stats.recentEnrollments.length ? stats.recentEnrollments.map(e => `<div class="list-item"><b>${e.student_name}</b> enrolled in <b>${e.course_title}</b><span class="muted">${e.enrolled_at}</span></div>`).join('') : '<p class="muted">No enrollments yet</p>'}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Top Courses</div>
+        <div class="card-body">
+          ${stats.topCourses.length ? stats.topCourses.map(c => `<div class="list-item"><b>${c.title}</b><span class="badge">${c.enrolled_count} students</span></div>`).join('') : '<p class="muted">No published courses yet</p>'}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ===== COURSES (Admin) =====
+let _courses = [];
+async function renderAdminCourses(el) {
+  el.innerHTML = '<div class="loading">Loading courses...</div>';
+  const categories = await (await fetch(API + '/api/categories')).json();
+  _courses = await (await fetch(API + '/api/courses')).json();
+  el.innerHTML = `
+    <div class="page-header"><h2 class="page-title">Course Management</h2><button class="btn btn-primary" onclick="showNewCourse()">+ New Course</button></div>
+    <div id="courseFormArea"></div>
+    <table class="data-table">
+      <thead><tr><th>Title</th><th>Category</th><th>Fee</th><th>Difficulty</th><th>Lessons</th><th>Students</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${_courses.map(c => `<tr>
+        <td><a href="#" onclick="viewCourse('${c.course_id}')">${c.title}</a></td>
+        <td>${c.category_name || '-'}</td>
+        <td><b>$${(c.course_fee || 0).toFixed(2)}</b></td>
+        <td><span class="badge badge-${c.difficulty}">${c.difficulty}</span></td>
+        <td>${c.lesson_count}</td>
+        <td>${c.enrolled_count}</td>
+        <td><span class="status-badge status-${c.status}">${c.status}</span></td>
+        <td><button class="btn btn-sm" onclick="editCourse('${c.course_id}')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteCourse('${c.course_id}')">Del</button></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+let _categories = [];
+async function showNewCourse() {
+  _categories = await (await fetch(API + '/api/categories')).json();
+  const instructors = await (await fetch(API + '/api/users')).json();
+  const instList = instructors.filter(u => u.role === 'instructor' || u.role === 'admin');
+  document.getElementById('courseFormArea').innerHTML = `
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-header">New Course</div>
+      <div class="card-body">
+        <div class="form-grid-3">
+          <div class="form-group"><label>Title *</label><input id="crsTitle"></div>
+          <div class="form-group"><label>Category</label><select id="crsCategory">${_categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+          <div class="form-group"><label>Instructor</label><select id="crsInstructor">${instList.map(i => `<option value="${i.id}">${i.first_name} ${i.last_name}</option>`).join('')}</select></div>
+          <div class="form-group"><label>Description</label><textarea id="crsDesc" rows="2"></textarea></div>
+          <div class="form-group"><label>Difficulty</label><select id="crsDifficulty"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></div>
+          <div class="form-group"><label>Duration (hrs)</label><input type="number" id="crsDuration" value="0"></div>
+          <div class="form-group"><label>Course Fee ($)</label><input type="number" id="crsFee" value="0" step="0.01"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveNewCourse()">Create Course</button>
+        <button class="btn" onclick="document.getElementById('courseFormArea').innerHTML=''">Cancel</button>
+      </div>
+    </div>`;
+}
+
+async function saveNewCourse() {
+  const data = { title: document.getElementById('crsTitle').value, description: document.getElementById('crsDesc').value, category_id: document.getElementById('crsCategory').value, instructor_id: document.getElementById('crsInstructor').value, difficulty: document.getElementById('crsDifficulty').value, duration_hours: document.getElementById('crsDuration').value, course_fee: document.getElementById('crsFee').value, status: 'published' };
+  if (!data.title) { showToast('Title required', 'error'); return; }
+  await fetch(API + '/api/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  showToast('Course created');
+  renderAdminCourses(document.getElementById('mainContent'));
+}
+
+async function deleteCourse(courseId) {
+  if (!confirm('Archive this course?')) return;
+  await fetch(API + '/api/courses/' + courseId, { method: 'DELETE' });
+  showToast('Course archived');
+  renderAdminCourses(document.getElementById('mainContent'));
+}
+
+async function editCourse(courseId) {
+  const course = await (await fetch(API + '/api/courses/' + courseId)).json();
+  const categories = await (await fetch(API + '/api/categories')).json();
+  const instructors = (await (await fetch(API + '/api/users')).json()).filter(u => u.role === 'instructor' || u.role === 'admin');
+  document.getElementById('courseFormArea').innerHTML = `
+    <div class="card" style="margin-bottom:12px;border:2px solid #1a237e">
+      <div class="card-header" style="background:#1a237e;color:#fff">Edit Course: ${course.title}</div>
+      <div class="card-body">
+        <div class="form-grid-3">
+          <div class="form-group"><label>Title *</label><input id="edCrsTitle" value="${course.title}"></div>
+          <div class="form-group"><label>Category</label><select id="edCrsCategory">${categories.map(c => `<option value="${c.id}" ${c.id == course.category_id ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>
+          <div class="form-group"><label>Instructor</label><select id="edCrsInstructor">${instructors.map(i => `<option value="${i.id}" ${i.id == course.instructor_id ? 'selected' : ''}>${i.first_name} ${i.last_name}</option>`).join('')}</select></div>
+          <div class="form-group"><label>Description</label><textarea id="edCrsDesc" rows="2">${course.description || ''}</textarea></div>
+          <div class="form-group"><label>Difficulty</label><select id="edCrsDifficulty"><option value="beginner" ${course.difficulty==='beginner'?'selected':''}>Beginner</option><option value="intermediate" ${course.difficulty==='intermediate'?'selected':''}>Intermediate</option><option value="advanced" ${course.difficulty==='advanced'?'selected':''}>Advanced</option></select></div>
+          <div class="form-group"><label>Duration (hrs)</label><input type="number" id="edCrsDuration" value="${course.duration_hours || 0}"></div>
+          <div class="form-group"><label>Course Fee ($)</label><input type="number" id="edCrsFee" value="${course.course_fee || 0}" step="0.01"></div>
+          <div class="form-group"><label>Status</label><select id="edCrsStatus"><option value="published" ${course.status==='published'?'selected':''}>Published</option><option value="draft" ${course.status==='draft'?'selected':''}>Draft</option><option value="archived" ${course.status==='archived'?'selected':''}>Archived</option></select></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveEditCourse('${courseId}')">Save Changes</button>
+        <button class="btn" onclick="document.getElementById('courseFormArea').innerHTML=''">Cancel</button>
+      </div>
+    </div>`;
+}
+
+async function saveEditCourse(courseId) {
+  const data = {
+    title: document.getElementById('edCrsTitle').value,
+    description: document.getElementById('edCrsDesc').value,
+    category_id: document.getElementById('edCrsCategory').value,
+    instructor_id: document.getElementById('edCrsInstructor').value,
+    difficulty: document.getElementById('edCrsDifficulty').value,
+    duration_hours: document.getElementById('edCrsDuration').value,
+    course_fee: document.getElementById('edCrsFee').value,
+    status: document.getElementById('edCrsStatus').value
+  };
+  if (!data.title) { showToast('Title required', 'error'); return; }
+  await fetch(API + '/api/courses/' + courseId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  showToast('Course updated');
+  renderAdminCourses(document.getElementById('mainContent'));
+}
+
+// ===== COURSE DETAIL =====
+async function viewCourse(courseId) {
+  _pageData.courseId = courseId;
+  showPage('course-detail');
+}
+
+async function renderCourseDetail(el) {
+  const courseId = _pageData.courseId;
+  el.innerHTML = '<div class="loading">Loading course...</div>';
+  const course = await (await fetch(API + '/api/courses/' + courseId)).json();
+  const isTeacher = currentUser.role === 'admin' || currentUser.role === 'instructor';
+  el.innerHTML = `
+    <div class="page-header">
+      <h2 class="page-title">${course.title}</h2>
+      <div><span class="badge badge-${course.difficulty}">${course.difficulty}</span> <span class="status-badge status-${course.status}">${course.status}</span></div>
+    </div>
+    <p class="muted">${course.description || 'No description'}</p>
+    <p><b>Instructor:</b> ${course.instructor_name || 'N/A'} | <b>Category:</b> ${course.category_name || 'N/A'} | <b>Duration:</b> ${course.duration_hours}h</p>
+    ${isTeacher ? `<div style="margin:8px 0"><button class="btn btn-primary btn-sm" onclick="showAddLesson('${courseId}')">+ Add Lesson</button> <button class="btn btn-sm" onclick="showAddQuiz('${courseId}')">+ Add Quiz</button></div>` : ''}
+    <div id="lessonFormArea"></div>
+    <div id="quizFormArea"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-header">Lessons (${course.lessons.length})</div>
+      <div class="card-body">
+        ${course.lessons.length ? course.lessons.map((l, i) => `
+          <div class="lesson-block">
+            <div class="lesson-header" onclick="this.parentElement.classList.toggle('collapsed')">
+              <div class="lesson-num">${i + 1}</div>
+              <div class="lesson-info">
+                <b>${l.title}</b>
+                <span class="muted">${l.description || ''} | ${l.videos.length} video(s) | ${l.duration_minutes} min</span>
+                ${l.batches && l.batches.length ? '<span class="muted">' + l.batches.map(b => '<span class="batch-tag">' + b.batch_name + ' (' + b.video_count + ')</span>').join(' ') + '</span>' : ''}
+              </div>
+              <div class="lesson-actions">
+                ${isTeacher ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showAddYouTubeLink('${l.lesson_id}','${courseId}',${(l.batches && l.batches.length ? l.batches.length : 0) + 1})">&#128279; Add YouTube Link</button>` : ''}
+                ${isTeacher ? `<button class="btn btn-sm" onclick="event.stopPropagation();showBatchUpload('${l.lesson_id}','${courseId}',${(l.batches && l.batches.length ? l.batches.length : 0) + 1})">&#8682; Batch Upload</button>` : ''}
+                ${isTeacher ? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteLesson('${l.lesson_id}','${courseId}')">Del</button>` : ''}
+                <span class="expand-arrow">&#9660;</span>
+              </div>
+            </div>
+            <div class="lesson-body">
+              ${(l.links && l.links.length) || (l.videos && l.videos.length) ? '' : '<p class="muted" style="padding:8px">No content yet. Use buttons above to add YouTube links or upload videos.</p>'}
+              ${l.links && l.links.length ? (() => {
+                const grouped = {};
+                l.links.forEach(lnk => {
+                  const bn = lnk.batch_number || 1;
+                  if (!grouped[bn]) grouped[bn] = [];
+                  grouped[bn].push(lnk);
+                });
+                const safeTitle = (t) => t.replace(/'/g, '').replace(/"/g, '');
+                return Object.keys(grouped).map(bn => {
+                  return '<div class="batch-section"><div class="batch-header" style="background:#e8f5e9"><b>&#127909; Batch ' + bn + ' - YouTube Links</b> <span class="muted">' + grouped[bn].length + ' link(s)</span></div><div class="batch-videos" style="flex-direction:column">' + grouped[bn].map(lnk => '<div class="batch-video-item" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f0f0f0"><span style="background:#c62828;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700">YT</span><button class="btn btn-sm btn-success" onclick="playYouTube(\'' + lnk.youtube_id + '\',\'' + courseId + '\',\'' + safeTitle(lnk.title) + '\')">&#9654; ' + lnk.title + '</button><span class="muted" style="font-size:10px">' + (lnk.duration || '') + '</span>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatchLink(\'' + lnk.link_id + '\',\'' + courseId + '\')">Del</button>' : '') + '</div>').join('') + '</div></div>';
+                }).join('');
+              })() : ''}
+              ${l.batches && l.batches.length ? l.batches.map(b => {
+                const batchLinks = (l.links || []).filter(lnk => lnk.batch_number === b.batch_number);
+                const batchVids = l.videos.filter(v => v.batch_number === b.batch_number);
+                const safeTitle2 = (t) => t.replace(/'/g, '').replace(/"/g, '');
+                return '<div class="batch-section"><div class="batch-header"><b>' + b.batch_name + '</b> <span class="muted">' + batchVids.length + ' video(s) | ' + batchLinks.length + ' link(s)</span>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatch(\'' + b.batch_id + '\',\'' + courseId + '\')">Del Batch</button>' : '') + '</div>' + (batchLinks.length ? '<div style="padding:4px 10px;background:#f8fff8">' + batchLinks.map(lnk => '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #e8f5e9"><span style="background:#c62828;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700">YT</span><button class="btn btn-sm btn-success" onclick="playYouTube(\'' + lnk.youtube_id + '\',\'' + courseId + '\',\'' + safeTitle2(lnk.title) + '\')">&#9654; ' + lnk.title + '</button>' + (isTeacher ? '<button class="btn btn-sm btn-danger" onclick="deleteBatchLink(\'' + lnk.link_id + '\',\'' + courseId + '\')">Del</button>' : '') + '</div>').join('') + '</div>' : '') + '<div class="batch-videos">' + batchVids.map(v => '<div class="batch-video-item"><button class="btn btn-sm btn-success" onclick="playVideo(\'' + v.video_id + '\',\'' + courseId + '\')">&#9654; ' + v.title + '</button></div>').join('') + '</div></div>';
+              }).join('') : ''}
+              ${l.videos.filter(v => !v.batch_number || v.batch_number === 0).length ? `
+                <div class="batch-section">
+                  <div class="batch-videos">
+                    ${l.videos.filter(v => !v.batch_number || v.batch_number === 0).map(v => `
+                      <div class="batch-video-item">
+                        <button class="btn btn-sm btn-success" onclick="playVideo('${v.video_id}','${courseId}')">&#9654; ${v.title}</button>
+                      </div>`).join('')}
+                  </div>
+                </div>` : ''}
+            </div>
+          </div>`).join('') : '<p class="muted">No lessons yet. Click "+ Add Lesson" to create one.</p>'}
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-header">Quizzes (${course.quizzes.length})</div>
+      <div class="card-body">
+        ${course.quizzes.length ? course.quizzes.map(q => `
+          <div class="lesson-item">
+            <div class="lesson-info"><b>${q.title}</b><span class="muted">${q.time_limit_minutes} min | Pass: ${q.pass_pct}%</span></div>
+            <div class="lesson-actions">
+              ${isTeacher ? `<a href="#" onclick="viewQuizAttempts('${q.quiz_id}')" class="btn btn-sm">Attempts</a>` : `<button class="btn btn-sm btn-primary" onclick="startQuiz('${q.quiz_id}','${courseId}')">Take Quiz</button>`}
+              ${isTeacher ? `<button class="btn btn-sm btn-danger" onclick="deleteQuiz('${q.quiz_id}','${courseId}')">Del</button>` : ''}
+            </div>
+          </div>`).join('') : '<p class="muted">No quizzes yet</p>'}
+      </div>
+    </div>
+    ${!isTeacher ? `<div style="margin-top:12px">
+      ${course.course_fee > 0 ? '<div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px"><b>Course Fee:</b> $' + course.course_fee.toFixed(2) + '</div>' : ''}
+      <button class="btn btn-primary" onclick="showEnrollPayment('${courseId}',${course.course_fee || 0},'${course.title}')">Enroll in Course</button>
+    </div>` : ''}`;
+}
+
+function showEnrollPayment(courseId, fee, courseTitle) {
+  var payDiv = document.getElementById('lessonFormArea');
+  payDiv.innerHTML = `
+    <div class="card" style="border:2px solid #1a237e;margin-bottom:8px">
+      <div class="card-header" style="background:#1a237e;color:#fff">&#128179; Enrollment & Payment</div>
+      <div class="card-body">
+        <div style="background:#f5f5f5;border-radius:4px;padding:8px;margin-bottom:8px">
+          <b>Course:</b> ${courseTitle}<br>
+          <b>Student:</b> ${currentUser.first_name} ${currentUser.last_name}<br>
+          <b>Email:</b> ${currentUser.email}<br>
+          <b>Phone:</b> ${currentUser.phone || 'N/A'}
+        </div>
+        <div class="form-grid-3">
+          <div class="form-group"><label>Payment Amount ($)</label><input type="number" id="payAmount" value="${fee}" step="0.01"></div>
+          <div class="form-group"><label>Payment Method</label>
+            <select id="payMethod">
+              <option value="cash">Cash</option>
+              <option value="card">Credit/Debit Card</option>
+              <option value="upi">UPI</option>
+              <option value="netbanking">Net Banking</option>
+              <option value="bank_transfer">Bank Transfer</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn btn-primary" onclick="confirmEnrollPayment('${courseId}')">Confirm & Generate Invoice</button>
+          <button class="btn" onclick="document.getElementById('lessonFormArea').innerHTML=''">Cancel</button>
+        </div>
+        <div id="payResult" style="margin-top:8px"></div>
+      </div>
+    </div>`;
+}
+
+async function confirmEnrollPayment(courseId) {
+  var amount = parseFloat(document.getElementById('payAmount').value) || 0;
+  var method = document.getElementById('payMethod').value;
+  document.getElementById('payResult').innerHTML = '<div style="color:#1976d2">Processing enrollment & generating invoice...</div>';
+  try {
+    var res = await fetch(API + '/api/enrollments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUser.id, course_id: courseId, payment_amount: amount, payment_method: method }) });
+    var data = await res.json();
+    if (data.error) { document.getElementById('payResult').innerHTML = '<div style="color:#c62828">' + data.error + '</div>'; return; }
+    document.getElementById('payResult').innerHTML = `
+      <div style="background:#e8f5e9;border:2px solid #4caf50;border-radius:6px;padding:12px">
+        <b style="color:#2e7d32;font-size:14px">&#10003; Enrollment Successful!</b><br>
+        <div style="margin-top:6px;font-size:11px">
+          <b>Invoice #:</b> ${data.invoice_number}<br>
+          <b>Payment:</b> $${amount.toFixed(2)} (${method}) - ${data.payment_status.toUpperCase()}<br>
+          <b>Invoice sent to:</b> ${currentUser.email} & prcmarcalling@gmail.com
+        </div>
+        <div style="margin-top:8px">
+          <a href="${API}${data.invoice_pdf}" target="_blank" class="btn btn-primary btn-sm">View Invoice PDF</a>
+          <a href="${API}${data.invoice_pdf}" download class="btn btn-sm">Download Invoice</a>
+        </div>
+      </div>`;
+    showToast('Enrolled & invoice generated!');
+  } catch(e) {
+    document.getElementById('payResult').innerHTML = '<div style="color:#c62828">Error: ' + e.message + '</div>';
+  }
+}
+
+// ===== ADD LESSON =====
+async function showAddLesson(courseId) {
+  document.getElementById('lessonFormArea').innerHTML = `
+    <div class="card" style="margin-bottom:8px">
+      <div class="card-header">Add Lesson</div>
+      <div class="card-body">
+        <div class="form-grid-3">
+          <div class="form-group"><label>Title *</label><input id="lesTitle"></div>
+          <div class="form-group"><label>Description</label><input id="lesDesc"></div>
+          <div class="form-group"><label>Duration (min)</label><input type="number" id="lesDuration" value="0"></div>
+          <div class="form-group"><label>Sort Order</label><input type="number" id="lesSort" value="0"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveLesson('${courseId}')">Create Lesson</button>
+        <button class="btn" onclick="document.getElementById('lessonFormArea').innerHTML=''">Cancel</button>
+      </div>
+    </div>`;
+}
+
+async function saveLesson(courseId) {
+  const data = { course_id: courseId, title: document.getElementById('lesTitle').value, description: document.getElementById('lesDesc').value, sort_order: document.getElementById('lesSort').value, duration_minutes: document.getElementById('lesDuration').value };
+  if (!data.title) { showToast('Title required', 'error'); return; }
+  await fetch(API + '/api/lessons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  showToast('Lesson created');
+  viewCourse(courseId);
+}
+
+async function deleteLesson(lessonId, courseId) {
+  if (!confirm('Delete lesson and its videos?')) return;
+  await fetch(API + '/api/lessons/' + lessonId, { method: 'DELETE' });
+  showToast('Lesson deleted');
+  viewCourse(courseId);
+}
+
+// ===== BATCH UPLOAD =====
+function showBatchUpload(lessonId, courseId, nextBatchNum) {
+  document.getElementById('lessonFormArea').innerHTML = `
+    <div class="card" style="margin-bottom:8px;border:2px solid #1a237e">
+      <div class="card-header" style="background:#1a237e;color:#fff">&#8682; Batch Video Upload</div>
+      <div class="card-body">
+        <div class="form-grid-3">
+          <div class="form-group"><label>Batch Number *</label><input type="number" id="batchNum" value="${nextBatchNum}" min="1"></div>
+          <div class="form-group"><label>Batch Name *</label><input id="batchName" value="Batch ${nextBatchNum}" placeholder="e.g. Batch 1 - Introduction"></div>
+          <div class="form-group"><label>Video Title Prefix (optional)</label><input id="batchTitlePrefix" placeholder="e.g. Lecture"></div>
+        </div>
+        <div class="form-group" style="margin-top:8px">
+          <label>Select Video Files (select multiple)</label>
+          <input type="file" id="batchFiles" multiple accept="video/*" style="padding:6px;border:2px dashed #1a237e;border-radius:6px;width:100%;background:#f8f9ff">
+          <div id="batchFileList" class="muted" style="margin-top:4px"></div>
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn btn-primary" onclick="doBatchUpload('${lessonId}','${courseId}')">Upload All Videos</button>
+          <button class="btn" onclick="document.getElementById('lessonFormArea').innerHTML=''">Cancel</button>
+        </div>
+        <div id="batchUploadProgress" style="margin-top:8px"></div>
+      </div>
+    </div>`;
+  document.getElementById('batchFiles').addEventListener('change', function() {
+    var files = this.files;
+    var list = '';
+    for (var i = 0; i < files.length; i++) {
+      var sizeMB = (files[i].size / (1024 * 1024)).toFixed(1);
+      list += '<div style="font-size:11px;padding:2px 0">' + (i + 1) + '. ' + files[i].name + ' <span class="muted">(' + sizeMB + ' MB)</span></div>';
+    }
+    document.getElementById('batchFileList').innerHTML = '<b>' + files.length + ' file(s) selected:</b>' + list;
+  });
+}
+
+async function doBatchUpload(lessonId, courseId) {
+  var files = document.getElementById('batchFiles').files;
+  if (!files.length) { showToast('Select video files first', 'error'); return; }
+  var batchNum = document.getElementById('batchNum').value;
+  var batchNm = document.getElementById('batchName').value;
+  var titlePrefix = document.getElementById('batchTitlePrefix').value;
+  var progress = document.getElementById('batchUploadProgress');
+  progress.innerHTML = '<div style="color:#1976d2">Uploading ' + files.length + ' video(s) to ' + batchNm + '... Please wait</div>';
+  var formData = new FormData();
+  for (var i = 0; i < files.length; i++) {
+    formData.append('videos', files[i]);
+  }
+  formData.append('lesson_id', lessonId);
+  formData.append('batch_number', batchNum);
+  formData.append('batch_name', batchNm);
+  if (titlePrefix) formData.append('title', titlePrefix);
+  try {
+    var res = await fetch(API + '/api/videos/upload', { method: 'POST', body: formData });
+    var data = await res.json();
+    if (data.error) { progress.innerHTML = '<div style="color:#c62828">Error: ' + data.error + '</div>'; return; }
+    progress.innerHTML = '<div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:4px;padding:8px"><b style="color:#2e7d32">&#10003; ' + data.message + '</b></div>';
+    showToast(data.count + ' video(s) uploaded');
+    setTimeout(() => viewCourse(courseId), 1500);
+  } catch(e) {
+    progress.innerHTML = '<div style="color:#c62828">Upload failed: ' + e.message + '</div>';
+  }
+}
+
+async function deleteBatch(batchId, courseId) {
+  if (!confirm('Delete entire batch and all its videos?')) return;
+  var res = await fetch(API + '/api/batches/' + batchId, { method: 'DELETE' });
+  var data = await res.json();
+  showToast(data.message);
+  viewCourse(courseId);
+}
+
+// ===== YOUTUBE LINKS =====
+function showAddYouTubeLink(lessonId, courseId, nextBatchNum) {
+  document.getElementById('lessonFormArea').innerHTML = `
+    <div class="card" style="margin-bottom:8px;border:2px solid #c62828">
+      <div class="card-header" style="background:#c62828;color:#fff">&#128279; Add YouTube Video Link</div>
+      <div class="card-body">
+        <div class="form-grid-3">
+          <div class="form-group"><label>Batch Number *</label><input type="number" id="ytBatchNum" value="${nextBatchNum}" min="1"></div>
+          <div class="form-group"><label>Video Title *</label><input id="ytTitle" placeholder="e.g. Lecture 1 - Introduction"></div>
+          <div class="form-group"><label>Duration (optional)</label><input id="ytDuration" placeholder="e.g. 45:30"></div>
+        </div>
+        <div class="form-group" style="margin-top:8px">
+          <label>YouTube URL or Video ID *</label>
+          <input id="ytUrl" placeholder="https://www.youtube.com/watch?v=... or youtu.be/... or just video ID" style="width:100%;padding:6px;border:2px solid #c62828;border-radius:4px;font-size:11px">
+        </div>
+        <div id="ytPreview" style="margin-top:8px"></div>
+        <div style="margin-top:8px">
+          <button class="btn btn-success" onclick="saveYouTubeLink('${lessonId}','${courseId}')">Add Link</button>
+          <button class="btn" onclick="document.getElementById('lessonFormArea').innerHTML=''">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('ytUrl').addEventListener('input', function() {
+    const val = this.value;
+    const patterns = [/youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/, /youtu\.be\/([a-zA-Z0-9_-]{11})/, /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/, /^([a-zA-Z0-9_-]{11})$/];
+    let ytId = null;
+    for (const p of patterns) { const m = val.match(p); if (m) { ytId = m[1]; break; } }
+    if (ytId) {
+      document.getElementById('ytPreview').innerHTML = '<div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:4px;padding:8px"><b style="color:#2e7d32">&#10003; Valid YouTube ID:</b> ' + ytId + '<br><iframe width="280" height="157" src="https://www.youtube.com/embed/' + ytId + '" frameborder="0" allowfullscreen style="margin-top:6px;border-radius:4px"></iframe></div>';
+    } else if (val.length > 5) {
+      document.getElementById('ytPreview').innerHTML = '<div style="color:#ff9800;font-size:11px">&#9888; Paste a valid YouTube URL or 11-character video ID</div>';
+    } else {
+      document.getElementById('ytPreview').innerHTML = '';
+    }
+  });
+}
+
+async function saveYouTubeLink(lessonId, courseId) {
+  const title = document.getElementById('ytTitle').value.trim();
+  const url = document.getElementById('ytUrl').value.trim();
+  const batchNum = parseInt(document.getElementById('ytBatchNum').value) || 1;
+  const duration = document.getElementById('ytDuration').value.trim();
+  if (!title) { showToast('Title required', 'error'); return; }
+  if (!url) { showToast('YouTube URL required', 'error'); return; }
+  const res = await fetch(API + '/api/batch-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lesson_id: lessonId, batch_number: batchNum, title, youtube_url: url, duration }) });
+  const data = await res.json();
+  if (data.error) { showToast(data.error, 'error'); return; }
+  document.getElementById('ytUrl').value = '';
+  document.getElementById('ytTitle').value = '';
+  document.getElementById('ytDuration').value = '';
+  document.getElementById('ytPreview').innerHTML = '<div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:4px;padding:8px;font-size:11px"><b style="color:#2e7d32">&#10003; Link added successfully!</b> Video ID: <code>' + data.youtube_id + '</code> — Playback only, no download.</div>';
+  showToast('YouTube link added');
+  viewCourse(courseId);
+}
+
+async function deleteBatchLink(linkId, courseId) {
+  if (!confirm('Delete this YouTube link?')) return;
+  await fetch(API + '/api/batch-links/' + linkId, { method: 'DELETE' });
+  showToast('Link deleted');
+  viewCourse(courseId);
+}
+
+function playYouTube(youtubeId, courseId, title) {
+  _pageData.youtubeId = youtubeId;
+  _pageData.courseId = courseId;
+  _pageData.youtubeTitle = title;
+  showPage('youtube-player');
+}
+
+async function renderYouTubePlayer(el) {
+  const yid = _pageData.youtubeId;
+  const isTeacher = currentUser.role === 'admin' || currentUser.role === 'instructor';
+  el.innerHTML = `
+    <div class="page-header">
+      <button class="btn btn-sm" onclick="viewCourse('${_pageData.courseId}')">&larr; Back to Course</button>
+      <h3>${_pageData.youtubeTitle || 'YouTube Video'}</h3>
+    </div>
+    <div class="yt-restricted-player" style="position:relative;border-radius:6px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.2);background:#000">
+      <div id="ytPlayerWrapper" style="position:relative;padding-bottom:50%;height:0;overflow:hidden">
+        <iframe id="ytFrame" src="https://www.youtube.com/embed/${yid}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&controls=0&disablekb=1&fs=0&playsinline=1&cc_load_policy=0&origin=${encodeURIComponent(location.origin)}" style="position:absolute;top:-5%;left:0;width:100%;height:112%;border:0" allow="autoplay; encrypted-media; gyroscope"></iframe>
+        <div style="position:absolute;top:0;left:0;right:0;height:6px;background:#c62828;z-index:11;pointer-events:none"></div>
+        <div style="position:absolute;bottom:0;left:0;right:0;height:16%;background:#000;z-index:11;pointer-events:none"></div>
+        <div style="position:absolute;top:0;left:0;right:0;height:8%;background:#000;z-index:11;pointer-events:none"></div>
+      </div>
+      <div style="background:#1a1a1a;padding:8px 12px;display:flex;align-items:center;gap:8px;justify-content:center">
+        <button onclick="ytPlayerCmd('seekTo',[Math.max(0,(ytCurTime||0)-10),true])" style="background:#333;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px" title="Rewind 10s">&#8634; 10s</button>
+        <button id="ytPlayBtn" onclick="ytPlayerTogglePlay()" style="background:#1a237e;color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;font-size:12px;font-weight:600">&#9654; Play</button>
+        <button onclick="ytPlayerCmd('seekTo',[(ytCurTime||0)+10,true])" style="background:#333;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px" title="Forward 10s">10s &#8635;</button>
+        <span id="ytTimeLabel" style="color:#aaa;font-size:11px;margin-left:6px">0:00 / 0:00</span>
+      </div>
+      <div style="background:#111;padding:4px 12px;display:flex;justify-content:space-between;align-items:center">
+        <span style="color:#888;font-size:10px">&#128274; Protected Content</span>
+        <span style="color:#666;font-size:10px">&#9654; Stream Only</span>
+      </div>
+    </div>`;
+
+  ytCurTime = 0; ytTotalDur = 0; ytIsPlaying = false;
+
+  function ytPostMsg(func, args) {
+    const f = document.getElementById('ytFrame');
+    if (f && f.contentWindow) f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args || [] }), '*');
+  }
+  window.ytPlayerCmd = ytPostMsg;
+
+  window.ytPlayerTogglePlay = function() {
+    if (ytIsPlaying) ytPostMsg('pauseVideo'); else ytPostMsg('playVideo');
+  };
+
+  function updateYtPlayBtn() {
+    const btn = document.getElementById('ytPlayBtn');
+    if (btn) btn.innerHTML = ytIsPlaying ? '&#10074;&#10074; Pause' : '&#9654; Play';
+  }
+  function updateYtTimeLabel() {
+    const tl = document.getElementById('ytTimeLabel');
+    if (tl && ytTotalDur > 0) tl.textContent = fmtTime(ytCurTime) + ' / ' + fmtTime(ytTotalDur);
+  }
+  function fmtTime(s) { const m = Math.floor(s/60); const sec = Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; }
+
+  window.addEventListener('message', window._ytPlayerMsg = (e) => {
+    try {
+      const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+      if (d.event === 'infoDelivery' && d.info) {
+        if (d.info.duration) ytTotalDur = d.info.duration;
+        if (d.info.currentTime !== undefined) ytCurTime = d.info.currentTime;
+        if (d.info.playerState === 1) { ytIsPlaying = true; updateYtPlayBtn(); }
+        if (d.info.playerState === 2) { ytIsPlaying = false; updateYtPlayBtn(); }
+        if (d.info.playerState === 0) { ytIsPlaying = false; updateYtPlayBtn(); }
+        updateYtTimeLabel();
+      }
+    } catch(e) {}
+  });
+
+  setTimeout(() => {
+    const f = document.getElementById('ytFrame');
+    if (f && f.contentWindow) {
+      f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'ytFrame' }), '*');
+    }
+  }, 1000);
+
+  setTimeout(() => { _pageData.youtubeId = null; }, 1000);
+
+  document.addEventListener('contextmenu', window._ytBlockCtx = (e) => { e.preventDefault(); return false; });
+  document.addEventListener('keydown', window._ytBlockKey = (e) => {
+    if (e.key === 'c' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+    if (e.key === 'u' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+    if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+    if (e.key === 'i' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+    if (e.key === 'F12') { e.preventDefault(); return false; }
+  });
+}
+
+function cleanupYtRestrictions() {
+  if (window._ytBlockCtx) document.removeEventListener('contextmenu', window._ytBlockCtx);
+  if (window._ytBlockKey) document.removeEventListener('keydown', window._ytBlockKey);
+}
+
+// ===== VIDEO PLAYER (NO DOWNLOAD) =====
+function playVideo(videoId, courseId) {
+  _pageData.videoId = videoId;
+  _pageData.courseId = courseId;
+  showPage('lesson-player');
+}
+
+async function renderLessonPlayer(el) {
+  const video = await (await fetch(API + '/api/videos/' + _pageData.videoId)).json();
+  el.innerHTML = `
+    <div class="page-header">
+      <button class="btn btn-sm" onclick="viewCourse('${_pageData.courseId}')">&larr; Back to Course</button>
+      <h3>${video.title}</h3>
+    </div>
+    <div class="video-container">
+      <video id="lmsVideo" controls controlsList="nodownload noplaybackrate" disablePictureInPicture oncontextmenu="return false" style="width:100%;max-height:70vh;background:#000">
+        <source src="${API}/api/stream/${video.video_id}" type="${video.mime_type || 'video/mp4'}">
+        Your browser does not support video playback.
+      </video>
+    </div>
+    <div style="margin-top:8px">
+      <span class="muted">Right-click download is disabled. Videos are for streaming only.</span>
+    </div>`;
+  setTimeout(() => {
+    const v = document.getElementById('lmsVideo');
+    if (v) {
+      v.addEventListener('contextmenu', e => e.preventDefault());
+      if (currentUser.role === 'student') {
+        v.addEventListener('timeupdate', () => {
+          if (v.duration) {
+            const pct = Math.round((v.currentTime / v.duration) * 100);
+            if (pct % 25 === 0 && pct > 0) {
+              fetch(API + '/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUser.id, lesson_id: _pageData.videoId, video_watched_pct: pct }) });
+            }
+          }
+        });
+      }
+    }
+  }, 500);
+}
+
+// ===== QUIZZES (Admin) =====
+async function renderAdminQuizzes(el) {
+  el.innerHTML = '<div class="loading">Loading quizzes...</div>';
+  const quizzes = await (await fetch(API + '/api/quizzes')).json();
+  el.innerHTML = `
+    <h2 class="page-title">Quiz Management</h2>
+    <table class="data-table">
+      <thead><tr><th>Title</th><th>Course</th><th>Questions</th><th>Time Limit</th><th>Pass %</th><th>Status</th></tr></thead>
+      <tbody>${quizzes.map(q => `<tr>
+        <td>${q.title}</td><td>${q.course_title}</td><td>${q.question_count}</td><td>${q.time_limit_minutes} min</td><td>${q.pass_pct}%</td>
+        <td><span class="status-badge status-${q.status}">${q.status}</span></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+async function showAddQuiz(courseId) {
+  document.getElementById('quizFormArea').innerHTML = `
+    <div class="card" style="margin-bottom:8px">
+      <div class="card-header">Add Quiz</div>
+      <div class="card-body">
+        <div class="form-grid-3">
+          <div class="form-group"><label>Title *</label><input id="quizTitle"></div>
+          <div class="form-group"><label>Time Limit (min)</label><input type="number" id="quizTime" value="30"></div>
+          <div class="form-group"><label>Pass %</label><input type="number" id="quizPass" value="70"></div>
+          <div class="form-group" style="grid-column:span 3"><label>Description</label><input id="quizDesc"></div>
+        </div>
+        <div id="quizQuestionsArea" style="margin-top:8px"></div>
+        <button class="btn btn-sm" onclick="addQuizQuestion()">+ Add Question</button>
+        <button class="btn btn-primary" onclick="saveQuiz('${courseId}')">Create Quiz</button>
+        <button class="btn" onclick="document.getElementById('quizFormArea').innerHTML=''">Cancel</button>
+      </div>
+    </div>`;
+  addQuizQuestion();
+}
+
+let _quizQuestions = [];
+function addQuizQuestion() {
+  const idx = _quizQuestions.length;
+  _quizQuestions.push({ question_text: '', option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: 'A', points: 1 });
+  const area = document.getElementById('quizQuestionsArea');
+  area.innerHTML += `
+    <div class="quiz-question-card" id="qq_${idx}">
+      <div class="form-grid-3">
+        <div class="form-group" style="grid-column:span 3"><label>Question ${idx + 1}</label><input id="qq_text_${idx}" placeholder="Enter question"></div>
+        <div class="form-group"><label>Option A</label><input id="qq_a_${idx}" placeholder="Option A"></div>
+        <div class="form-group"><label>Option B</label><input id="qq_b_${idx}" placeholder="Option B"></div>
+        <div class="form-group"><label>Option C</label><input id="qq_c_${idx}" placeholder="Option C"></div>
+        <div class="form-group"><label>Option D</label><input id="qq_d_${idx}" placeholder="Option D"></div>
+        <div class="form-group"><label>Correct</label><select id="qq_ans_${idx}"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+        <div class="form-group"><label>Points</label><input type="number" id="qq_pts_${idx}" value="1"></div>
+      </div>
+    </div>`;
+}
+
+async function saveQuiz(courseId) {
+  const questions = _quizQuestions.map((q, i) => ({
+    question_text: document.getElementById('qq_text_' + i).value,
+    option_a: document.getElementById('qq_a_' + i).value,
+    option_b: document.getElementById('qq_b_' + i).value,
+    option_c: document.getElementById('qq_c_' + i).value,
+    option_d: document.getElementById('qq_d_' + i).value,
+    correct_answer: document.getElementById('qq_ans_' + i).value,
+    points: parseInt(document.getElementById('qq_pts_' + i).value) || 1
+  }));
+  const data = { course_id: courseId, title: document.getElementById('quizTitle').value, description: document.getElementById('quizDesc').value, time_limit_minutes: document.getElementById('quizTime').value, pass_pct: document.getElementById('quizPass').value, questions };
+  if (!data.title) { showToast('Title required', 'error'); return; }
+  _quizQuestions = [];
+  await fetch(API + '/api/quizzes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  showToast('Quiz created');
+  viewCourse(courseId);
+}
+
+async function deleteQuiz(quizId, courseId) {
+  if (!confirm('Delete quiz?')) return;
+  await fetch(API + '/api/quizzes/' + quizId, { method: 'DELETE' });
+  showToast('Quiz deleted');
+  viewCourse(courseId);
+}
+
+// ===== TAKE QUIZ (Student) =====
+async function startQuiz(quizId, courseId) {
+  _pageData.quizId = quizId;
+  _pageData.courseId = courseId;
+  showPage('take-quiz');
+}
+
+let _currentQuiz = null;
+let _quizAnswers = {};
+let _quizTimer = null;
+
+async function renderTakeQuiz(el) {
+  _currentQuiz = await (await fetch(API + '/api/quizzes/' + _pageData.quizId)).json();
+  _quizAnswers = {};
+  let timeLeft = _currentQuiz.time_limit_minutes * 60;
+  el.innerHTML = `
+    <div class="page-header">
+      <button class="btn btn-sm" onclick="viewCourse('${_pageData.courseId}')">&larr; Back</button>
+      <h3>${_currentQuiz.title}</h3>
+      <div id="quizTimer" class="quiz-timer">Time: ${_currentQuiz.time_limit_minutes}:00</div>
+    </div>
+    <div id="quizQuestions">
+      ${_currentQuiz.questions.map((q, i) => `
+        <div class="quiz-q">
+          <div class="quiz-q-num">Q${i + 1} (${q.points} pt${q.points > 1 ? 's' : ''})</div>
+          <div class="quiz-q-text">${q.question_text}</div>
+          <div class="quiz-options">
+            ${['A', 'B', 'C', 'D'].map(opt => `
+              <label class="quiz-opt"><input type="radio" name="qq_${q.id}" value="${opt}" onchange="_quizAnswers[${q.id}]='${opt}'"> <b>${opt}.</b> ${q['option_' + opt.toLowerCase()] || ''}</label>
+            `).join('')}
+          </div>
+        </div>`).join('')}
+    </div>
+    <button class="btn btn-primary" onclick="submitQuiz()" style="margin-top:12px">Submit Quiz</button>`;
+  _quizTimer = setInterval(() => {
+    timeLeft--;
+    if (timeLeft <= 0) { clearInterval(_quizTimer); submitQuiz(); return; }
+    const m = Math.floor(timeLeft / 60);
+    const s = timeLeft % 60;
+    document.getElementById('quizTimer').textContent = `Time: ${m}:${s < 10 ? '0' : ''}${s}`;
+    if (timeLeft < 60) document.getElementById('quizTimer').style.color = '#c62828';
+  }, 1000);
+}
+
+async function submitQuiz() {
+  if (_quizTimer) clearInterval(_quizTimer);
+  const res = await (await fetch(API + '/api/quizzes/' + _pageData.quizId + '/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUser.id, answers: _quizAnswers }) })).json();
+  _pageData.quizResult = res;
+  _pageData.quizId2 = _pageData.quizId;
+  showPage('quiz-results');
+}
+
+async function renderQuizResults(el) {
+  const r = _pageData.quizResult;
+  el.innerHTML = `
+    <div class="page-header">
+      <button class="btn btn-sm" onclick="viewCourse('${_pageData.courseId}')">&larr; Back to Course</button>
+      <h3>Quiz Results</h3>
+    </div>
+    <div class="result-card ${r.passed ? 'pass' : 'fail'}">
+      <div class="result-score">${r.score}%</div>
+      <div class="result-label">${r.passed ? 'PASSED' : 'FAILED'} (Pass: ${r.pass_pct}%)</div>
+      <div class="result-detail">${r.earned_points} / ${r.total_points} points</div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-header">Detailed Results</div>
+      <div class="card-body">
+        ${r.results.map((res, i) => `<div class="result-item ${res.correct ? 'correct' : 'wrong'}">
+          <b>Q${i + 1}:</b> ${res.correct ? '&#10003; Correct' : '&#10008; Wrong'} — Your answer: <b>${res.user_answer || 'None'}</b> | Correct: <b>${res.correct_answer}</b>
+        </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+async function viewQuizAttempts(quizId) {
+  const attempts = await (await fetch(API + '/api/quizzes/' + quizId + '/attempts')).json();
+  const content = document.getElementById('mainContent');
+  content.innerHTML = `
+    <div class="page-header"><button class="btn btn-sm" onclick="history.back()">&larr; Back</button><h3>Quiz Attempts</h3></div>
+    <table class="data-table">
+      <thead><tr><th>Student</th><th>Score</th><th>Points</th><th>Passed</th><th>Date</th></tr></thead>
+      <tbody>${attempts.map(a => `<tr><td>${a.student_name}</td><td>${a.score}%</td><td>${a.earned_points}/${a.total_points}</td><td>${a.passed ? '<span class="status-badge status-active">PASS</span>' : '<span class="status-badge status-expired">FAIL</span>'}</td><td>${a.completed_at || a.started_at}</td></tr>`).join('')}</tbody>
+    </table>`;
+}
+
+// ===== CATEGORIES =====
+async function renderCategories(el) {
+  const cats = await (await fetch(API + '/api/categories')).json();
+  el.innerHTML = `
+    <div class="page-header"><h2 class="page-title">Categories</h2><button class="btn btn-primary" onclick="showNewCategory()">+ New Category</button></div>
+    <div id="catFormArea"></div>
+    <table class="data-table">
+      <thead><tr><th>Color</th><th>Name</th><th>Description</th><th>Actions</th></tr></thead>
+      <tbody>${cats.map(c => `<tr><td><span class="color-dot" style="background:${c.color}"></span></td><td>${c.name}</td><td>${c.description || '-'}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="deleteCategory(${c.id})">Del</button></td></tr>`).join('')}</tbody>
+    </table>`;
+}
+
+function showNewCategory() {
+  document.getElementById('catFormArea').innerHTML = `<div class="card" style="margin-bottom:8px"><div class="card-body"><div class="form-grid-3">
+    <div class="form-group"><label>Name</label><input id="catName"></div>
+    <div class="form-group"><label>Description</label><input id="catDesc"></div>
+    <div class="form-group"><label>Color</label><input type="color" id="catColor" value="#1a237e"></div>
+  </div><button class="btn btn-primary" onclick="saveCategory()">Create</button></div></div>`;
+}
+
+async function saveCategory() {
+  await fetch(API + '/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: document.getElementById('catName').value, description: document.getElementById('catDesc').value, color: document.getElementById('catColor').value }) });
+  showToast('Category created');
+  renderCategories(document.getElementById('mainContent'));
+}
+
+async function deleteCategory(id) {
+  if (!confirm('Delete?')) return;
+  await fetch(API + '/api/categories/' + id, { method: 'DELETE' });
+  renderCategories(document.getElementById('mainContent'));
+}
+
+// ===== STUDENTS (Admin) =====
+const ALL_PAGES = [
+  { id: 'my-courses', label: 'My Courses' },
+  { id: 'catalog', label: 'Browse Catalog' },
+  { id: 'my-quizzes', label: 'My Quizzes' },
+  { id: 'my-invoices', label: 'My Invoices' },
+  { id: 'account', label: 'Account' },
+  { id: 'onboarding', label: 'Onboarding' },
+  { id: 'course-detail', label: 'Course Detail' },
+  { id: 'lesson-player', label: 'Lesson Player' },
+  { id: 'youtube-player', label: 'YouTube Player' },
+  { id: 'take-quiz', label: 'Take Quiz' },
+  { id: 'quiz-results', label: 'Quiz Results' }
+];
+
+function renderPageAccessCheckboxes(selected) {
+  const sel = selected === '*' ? ALL_PAGES.map(p=>p.id) : (selected || '').split(',').filter(Boolean);
+  return ALL_PAGES.map(p => `<label style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px;font-size:11px;cursor:pointer">
+    <input type="checkbox" class="pageAccessCb" value="${p.id}" ${sel.includes(p.id) ? 'checked' : ''}> ${p.label}
+  </label>`).join('');
+}
+function getPageAccessValue() {
+  const cbs = document.querySelectorAll('.pageAccessCb:checked');
+  if (cbs.length === 0) return '*';
+  return Array.from(cbs).map(cb => cb.value).join(',');
+}
+
+async function renderStudents(el) {
+  el.innerHTML = '<div class="loading">Loading students...</div>';
+  const users = await (await fetch(API + '/api/users')).json();
+  el.innerHTML = `
+    <h2 class="page-title">Student Management</h2>
+    <button class="btn btn-primary" onclick="showAddStudentForm()" style="margin-bottom:8px">+ Add Student</button>
+    <div id="addStudentForm" style="display:none;margin-bottom:12px;background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:12px">
+      <h4 style="margin:0 0 8px">New Student</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <input type="text" id="newStuFirst" placeholder="First Name*" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+        <input type="text" id="newStuLast" placeholder="Last Name*" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+        <input type="email" id="newStuEmail" placeholder="Email*" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+        <input type="password" id="newStuPass" placeholder="Password*" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+        <input type="text" id="newStuPhone" placeholder="Phone" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+        <select id="newStuRole" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px"><option value="student">Student</option><option value="instructor">Instructor</option></select>
+      </div>
+      <div style="margin-top:6px">
+        <b style="font-size:11px">Screen Access:</b>
+        <div id="newStuPageAccess" style="margin-top:3px">${renderPageAccessCheckboxes('my-courses,catalog,my-quizzes,my-invoices,account')}</div>
+      </div>
+      <div style="margin-top:6px">
+        <button class="btn btn-primary btn-sm" onclick="saveNewStudent()">Save</button>
+        <button class="btn btn-sm" onclick="document.getElementById('addStudentForm').style.display='none'">Cancel</button>
+      </div>
+    </div>
+    <div id="editStudentForm" style="display:none;margin-bottom:12px;background:#e8f5e9;border:1px solid #4caf50;border-radius:6px;padding:12px"></div>
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Phone</th><th>Screen Access</th><th>Status</th><th>Joined</th><th>Action</th></tr></thead>
+      <tbody>${users.map(u => {
+        const pa = u.page_access || '*';
+        const paLabel = pa === '*' ? '<span class="badge badge-admin">ALL</span>' : pa.split(',').map(p => '<span class="badge badge-student" style="font-size:9px;margin:1px">' + p + '</span>').join(' ');
+        return `<tr>
+          <td>${u.first_name} ${u.last_name}</td><td>${u.email}</td>
+          <td><span class="badge badge-${u.role}">${u.role}</span></td>
+          <td>${u.phone || '-'}</td>
+          <td style="max-width:200px">${paLabel}</td>
+          <td><span class="status-badge status-${u.status}">${u.status}</span></td>
+          <td>${u.created_at}</td>
+          <td><button class="btn btn-sm" onclick="editStudent('${u.user_id}')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deactivateStudent('${u.user_id}')">Disable</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+function showAddStudentForm() {
+  document.getElementById('addStudentForm').style.display = 'block';
+  document.getElementById('editStudentForm').style.display = 'none';
+}
+
+async function saveNewStudent() {
+  const data = {
+    first_name: document.getElementById('newStuFirst').value.trim(),
+    last_name: document.getElementById('newStuLast').value.trim(),
+    email: document.getElementById('newStuEmail').value.trim(),
+    password: document.getElementById('newStuPass').value,
+    phone: document.getElementById('newStuPhone').value.trim(),
+    role: document.getElementById('newStuRole').value,
+    page_access: getPageAccessValue()
+  };
+  if (!data.first_name || !data.last_name || !data.email || !data.password) { showToast('Fill all required fields', 'error'); return; }
+  const res = await fetch(API + '/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const r = await res.json();
+  if (r.error) { showToast(r.error, 'error'); return; }
+  showToast('Student created');
+  renderStudents(document.getElementById('mainContent'));
+}
+
+async function editStudent(userId) {
+  const u = await (await fetch(API + '/api/users/' + userId)).json();
+  const form = document.getElementById('editStudentForm');
+  document.getElementById('addStudentForm').style.display = 'none';
+  form.style.display = 'block';
+  form.innerHTML = `
+    <h4 style="margin:0 0 8px">Edit: ${u.first_name} ${u.last_name}</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <input type="text" id="editStuFirst" value="${u.first_name}" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+      <input type="text" id="editStuLast" value="${u.last_name}" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+      <input type="text" id="editStuPhone" value="${u.phone || ''}" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+      <select id="editStuRole" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+        <option value="student" ${u.role==='student'?'selected':''}>Student</option>
+        <option value="instructor" ${u.role==='instructor'?'selected':''}>Instructor</option>
+      </select>
+      <select id="editStuStatus" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
+        <option value="active" ${u.status==='active'?'selected':''}>Active</option>
+        <option value="inactive" ${u.status==='inactive'?'selected':''}>Inactive</option>
+      </select>
+    </div>
+    <div style="margin-top:6px">
+      <b style="font-size:11px">Screen Access:</b>
+      <div id="editStuPageAccess" style="margin-top:3px">${renderPageAccessCheckboxes(u.page_access || '*')}</div>
+    </div>
+    <div style="margin-top:6px">
+      <button class="btn btn-primary btn-sm" onclick="saveEditStudent('${u.user_id}')">Update</button>
+      <button class="btn btn-sm" onclick="document.getElementById('editStudentForm').style.display='none'">Cancel</button>
+    </div>`;
+}
+
+async function saveEditStudent(userId) {
+  const data = {
+    first_name: document.getElementById('editStuFirst').value.trim(),
+    last_name: document.getElementById('editStuLast').value.trim(),
+    phone: document.getElementById('editStuPhone').value.trim(),
+    role: document.getElementById('editStuRole').value,
+    status: document.getElementById('editStuStatus').value,
+    page_access: getPageAccessValue()
+  };
+  const res = await fetch(API + '/api/users/' + userId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const r = await res.json();
+  if (r.error) { showToast(r.error, 'error'); return; }
+  showToast('Updated');
+  renderStudents(document.getElementById('mainContent'));
+}
+
+async function deactivateStudent(userId) {
+  if (!confirm('Disable this student?')) return;
+  await fetch(API + '/api/users/' + userId, { method: 'DELETE' });
+  showToast('Disabled');
+  renderStudents(document.getElementById('mainContent'));
+}
+
+// ===== ENROLLMENTS (Admin) =====
+async function renderEnrollments(el) {
+  el.innerHTML = '<div class="loading">Loading enrollments...</div>';
+  const enrs = await (await fetch(API + '/api/enrollments')).json();
+  el.innerHTML = `
+    <h2 class="page-title">Enrollments</h2>
+    <table class="data-table">
+      <thead><tr><th>Student</th><th>Course</th><th>Enrolled</th><th>Progress</th><th>Status</th></tr></thead>
+      <tbody>${enrs.map(e => `<tr>
+        <td>${e.student_name}</td><td><a href="#" onclick="viewCourse('${e.course_id}')">${e.course_title}</a></td><td>${e.enrolled_at}</td>
+        <td><div class="progress-bar"><div class="progress-fill" style="width:${e.progress_pct}%"></div></div> ${e.progress_pct}%</td>
+        <td><span class="status-badge status-${e.status}">${e.status}</span></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+// ===== MY COURSES (Student) =====
+async function renderMyCourses(el) {
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  const enrs = await (await fetch(API + '/api/enrollments?user_id=' + currentUser.id)).json();
+  el.innerHTML = `
+    <h2 class="page-title">My Courses</h2>
+    ${enrs.length ? `<div class="course-grid">${enrs.map(e => `
+      <div class="course-card" onclick="viewCourse('${e.course_id}')">
+        <div class="course-card-title">${e.course_title}</div>
+        <div class="course-card-meta">Enrolled: ${e.enrolled_at}</div>
+        <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${e.progress_pct}%"></div></div>
+        <div class="muted" style="margin-top:4px">${e.progress_pct}% complete</div>
+      </div>`).join('')}</div>` : '<p class="muted">No courses yet. <a href="#" onclick="showPage(\'catalog\')">Browse catalog</a></p>'}`;
+}
+
+// ===== CATALOG (Student) =====
+async function renderCatalog(el) {
+  el.innerHTML = '<div class="loading">Loading catalog...</div>';
+  const courses = await (await fetch(API + '/api/courses?status=published')).json();
+  el.innerHTML = `
+    <h2 class="page-title">Course Catalog</h2>
+    <div class="course-grid">${courses.map(c => `
+      <div class="course-card" onclick="viewCourse('${c.course_id}')">
+        <div class="course-card-title">${c.title}</div>
+        ${c.course_fee > 0 ? '<div style="color:#1a237e;font-weight:700;font-size:13px;margin:4px 0">$' + c.course_fee.toFixed(2) + '</div>' : '<div style="color:#2e7d32;font-weight:700;font-size:12px;margin:4px 0">FREE</div>'}
+        <div class="course-card-meta">${c.category_name || 'Uncategorized'} | ${c.difficulty}</div>
+        <div class="course-card-meta">${c.lesson_count} lessons | ${c.enrolled_count} students</div>
+        <div class="muted" style="margin-top:4px">${c.description ? c.description.substring(0, 80) + '...' : ''}</div>
+      </div>`).join('')}</div>`;
+}
+
+// ===== MY QUIZZES (Student) =====
+async function renderMyQuizzes(el) {
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  const enrs = await (await fetch(API + '/api/enrollments?user_id=' + currentUser.id)).json();
+  const courseIds = [...new Set(enrs.map(e => e.course_id))];
+  let quizzes = [];
+  if (courseIds.length) {
+    quizzes = await (await fetch(API + '/api/quizzes?course_ids=' + courseIds.join(','))).json();
+  }
+  el.innerHTML = `
+    <h2 class="page-title">My Quizzes</h2>
+    ${quizzes.length ? `<table class="data-table"><thead><tr><th>Quiz</th><th>Course</th><th>Questions</th><th>Time</th><th>Action</th></tr></thead>
+    <tbody>${quizzes.map(q => `<tr><td>${q.title}</td><td>${q.course_title}</td><td>${q.question_count}</td><td>${q.time_limit_minutes} min</td>
+      <td><button class="btn btn-sm btn-primary" onclick="startQuiz('${q.quiz_id}','${q.course_id}')">Take Quiz</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Enroll in a course to access quizzes</p>'}`;
+}
+
+// ===== INVOICES (Admin) =====
+async function renderInvoices(el) {
+  el.innerHTML = '<div class="loading">Loading invoices...</div>';
+  const invoices = await (await fetch(API + '/api/invoices')).json();
+  el.innerHTML = `
+    <h2 class="page-title">&#128179; All Invoices</h2>
+    <p class="muted" style="margin-bottom:8px">Invoices sent to: prcmarcalling@gmail.com</p>
+    <div style="margin-bottom:8px"><input type="text" id="invoiceSearchInput" placeholder="Search by invoice #, student, course, status..." oninput="filterInvoices()" style="width:300px;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:11px"></div>
+    <table class="data-table" id="invoicesTable">
+      <thead><tr><th>Invoice #</th><th>Date</th><th>Student</th><th>Email</th><th>Phone</th><th>Course</th><th>Amount</th><th>Method</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody>${invoices.length ? invoices.map(inv => `<tr data-search="${(inv.invoice_number+' '+inv.student_name+' '+inv.student_email+' '+inv.course_title+' '+(inv.payment_status||'')).toLowerCase()}">
+        <td><b>${inv.invoice_number}</b></td><td>${inv.invoice_date}</td>
+        <td>${inv.student_name}</td><td>${inv.student_email}</td><td>${inv.student_phone || '-'}</td>
+        <td>${inv.course_title}</td><td><b>$${(inv.payment_amount || 0).toFixed(2)}</b></td>
+        <td>${(inv.payment_method || 'cash').toUpperCase()}</td>
+        <td><span class="status-badge status-${inv.payment_status}">${(inv.payment_status || 'pending').toUpperCase()}</span></td>
+        <td><a href="${API}/api/invoices/${inv.invoice_number}" target="_blank" class="btn btn-sm btn-primary">View PDF</a></td>
+      </tr>`).join('') : '<tr><td colspan="10" class="muted" style="text-align:center;padding:20px">No invoices yet</td></tr>'}</tbody>
+    </table>`;
+}
+function filterInvoices() {
+  const q = document.getElementById('invoiceSearchInput').value.toLowerCase();
+  document.querySelectorAll('#invoicesTable tbody tr').forEach(r => {
+    r.style.display = r.dataset.search && r.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+
+// ===== MY INVOICES (Student) =====
+async function renderMyInvoices(el) {
+  el.innerHTML = '<div class="loading">Loading invoices...</div>';
+  const invoices = await (await fetch(API + '/api/enrollments?user_id=' + currentUser.id)).json();
+  const myInvoices = invoices.filter(i => i.invoice_number);
+  el.innerHTML = `
+    <h2 class="page-title">&#128179; My Invoices</h2>
+    <div class="card" style="margin-bottom:8px;background:#e3f2fd">
+      <div class="card-body" style="font-size:11px">All invoices are also sent to your email: <b>${currentUser.email}</b> and admin: <b>prcmarcalling@gmail.com</b></div>
+    </div>
+    <div style="margin-bottom:8px"><input type="text" id="myInvoiceSearchInput" placeholder="Search by invoice #, course, status..." oninput="filterMyInvoices()" style="width:300px;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:11px"></div>
+    <table class="data-table" id="myInvoicesTable">
+      <thead><tr><th>Invoice #</th><th>Date</th><th>Course</th><th>Amount</th><th>Method</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody>${myInvoices.length ? myInvoices.map(inv => `<tr data-search="${(inv.invoice_number+' '+inv.course_title+' '+(inv.payment_status||'')).toLowerCase()}">
+        <td><b>${inv.invoice_number}</b></td><td>${inv.invoice_date}</td>
+        <td>${inv.course_title}</td><td><b>$${(inv.payment_amount || 0).toFixed(2)}</b></td>
+        <td>${(inv.payment_method || 'cash').toUpperCase()}</td>
+        <td><span class="status-badge status-${inv.payment_status}">${(inv.payment_status || 'pending').toUpperCase()}</span></td>
+        <td>
+          <a href="${API}/api/invoices/${inv.invoice_number}" target="_blank" class="btn btn-sm btn-primary">View PDF</a>
+          <a href="${API}/api/invoices/${inv.invoice_number}" download class="btn btn-sm">Download</a>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">No invoices yet. Enroll in a course first.</td></tr>'}</tbody>
+    </table>`;
+}
+function filterMyInvoices() {
+  const q = document.getElementById('myInvoiceSearchInput').value.toLowerCase();
+  document.querySelectorAll('#myInvoicesTable tbody tr').forEach(r => {
+    r.style.display = r.dataset.search && r.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+
+// ===== ONBOARDING =====
+async function renderOnboarding(el) {
+  el.innerHTML = '<div class="loading">Loading onboarding video...</div>';
+  const vidRes = await fetch(API + '/api/onboarding/video');
+  const vidData = await vidRes.json();
+  const yid = vidData.youtube_id;
+  let watchedTime = 0;
+  el.innerHTML = `
+    <div style="max-width:800px;margin:0 auto;padding:20px 0">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:28px;font-weight:800;color:#1a237e">&#128218; Welcome to LMS</div>
+        <p style="color:#666;font-size:13px;margin-top:6px">Please watch this training video before you begin</p>
+      </div>
+      <div style="position:relative;border-radius:8px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.15);background:#000">
+        <div style="position:relative;padding-bottom:50%;height:0;overflow:hidden">
+          <iframe id="onboardFrame" src="https://www.youtube.com/embed/${yid}?autoplay=0&rel=0&modestbranding=1&iv_load_policy=3&controls=0&disablekb=1&fs=0&playsinline=1" style="position:absolute;top:-5%;left:0;width:100%;height:112%;border:0" allow="autoplay; encrypted-media; gyroscope" allowfullscreen="false"></iframe>
+          <div style="position:absolute;top:0;left:0;right:0;height:8%;background:#000;z-index:11;pointer-events:none"></div>
+          <div style="position:absolute;bottom:0;left:0;right:0;height:16%;background:#000;z-index:11;pointer-events:none"></div>
+        </div>
+        <div id="onboardControls" style="background:#1a1a1a;padding:8px 12px;display:flex;align-items:center;gap:10px;justify-content:center">
+          <button onclick="onboardSkip(-10)" style="background:#333;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:13px" title="Rewind 10s">&#8634; 10s</button>
+          <button id="onboardPlayBtn" onclick="onboardTogglePlay()" style="background:#1a237e;color:#fff;border:none;border-radius:4px;padding:6px 18px;cursor:pointer;font-size:13px;font-weight:600">&#9654; Play</button>
+          <button onclick="onboardSkip(10)" style="background:#333;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:13px" title="Forward 10s">10s &#8635;</button>
+          <span id="onboardTimeLabel" style="color:#aaa;font-size:11px;margin-left:8px">0:00 / 0:00</span>
+        </div>
+      </div>
+      <div style="margin-top:12px;background:#fff3e0;border:1px solid #ff9800;border-radius:6px;padding:12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:20px">&#9203;</span>
+          <div>
+            <b style="color:#e65100">Watch the full video to continue</b>
+            <p style="font-size:11px;color:#666;margin-top:2px">The "Continue" button will appear after you watch most of the video</p>
+          </div>
+          <div id="onboardTimer" style="margin-left:auto;font-size:12px;color:#666"></div>
+        </div>
+        <div id="onboardProgress" style="margin-top:8px;height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden">
+          <div id="onboardProgressFill" style="height:100%;width:0%;background:#ff9800;border-radius:2px;transition:width 1s"></div>
+        </div>
+      </div>
+      <div id="onboardActions" style="text-align:center;margin-top:16px">
+        <span id="onboardWaitMsg" style="color:#888;font-size:12px">Please watch the video... (${currentUser.first_name})</span>
+      </div>
+    </div>`;
+  
+  document.addEventListener('contextmenu', window._ytBlockCtx = (e) => { e.preventDefault(); return false; });
+  document.addEventListener('keydown', window._ytBlockKey = (e) => {
+    if (e.key === 'c' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+    if (e.key === 'u' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
+    if (e.key === 'F12') { e.preventDefault(); return false; }
+  });
+
+  let totalDuration = 0;
+  let currentTime = 0;
+  let isPlaying = false;
+  let ytReady = false;
+
+  function ytPostMsg(func, args) {
+    const iframe = document.getElementById('onboardFrame');
+    if (!iframe || !iframe.contentWindow) return;
+    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args || [] }), '*');
+  }
+
+  function ytListen() {
+    window.addEventListener('message', window._onboardMsg = (e) => {
+      try {
+        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (d.event === 'infoDelivery' && d.info) {
+          if (d.info.duration) { totalDuration = d.info.duration; ytReady = true; }
+          if (d.info.currentTime !== undefined) currentTime = d.info.currentTime;
+          if (d.info.playerState === 1) isPlaying = true;
+          if (d.info.playerState === 2) isPlaying = false;
+          if (d.info.playerState === 0) isPlaying = false;
+          updatePlayBtn();
+        }
+        if (d.event === 'onReady') { ytReady = true; }
+      } catch(e) {}
+    });
+    try {
+      const iframe = document.getElementById('onboardFrame');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'onboardFrame' }), '*');
+        iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onReady'] }), '*');
+        iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['infoDelivery'] }), '*');
+      }
+    } catch(e) {}
+  }
+
+  window.onboardTogglePlay = function() {
+    if (isPlaying) { ytPostMsg('pauseVideo'); } else { ytPostMsg('playVideo'); }
+  };
+  window.onboardSkip = function(seconds) {
+    const cur = currentTime || 0;
+    ytPostMsg('seekTo', [cur + seconds, true]);
+  };
+  function updatePlayBtn() {
+    const btn = document.getElementById('onboardPlayBtn');
+    if (btn) btn.innerHTML = isPlaying ? '&#10074;&#10074; Pause' : '&#9654; Play';
+  }
+
+  ytListen();
+
+  const timerInterval = setInterval(() => {
+    const tl = document.getElementById('onboardTimeLabel');
+    if (tl && totalDuration > 0) tl.textContent = fmtTime(currentTime) + ' / ' + fmtTime(totalDuration);
+    if (totalDuration > 0) {
+      const pct = Math.min(100, Math.round((currentTime / (totalDuration * 0.75)) * 100));
+      const fill = document.getElementById('onboardProgressFill');
+      if (fill) fill.style.width = pct + '%';
+      const timer = document.getElementById('onboardTimer');
+      if (timer) timer.textContent = Math.round(currentTime) + 's / ~' + Math.round(totalDuration * 0.75) + 's';
+      if (pct >= 100) {
+        clearInterval(timerInterval);
+        const actions = document.getElementById('onboardActions');
+        if (actions) actions.innerHTML = `<button class="btn btn-primary" style="font-size:14px;padding:10px 30px" onclick="completeOnboarding()">&#10003; Continue to Dashboard</button>`;
+      }
+    }
+  }, 1000);
+  function fmtTime(s) { const m = Math.floor(s/60); const sec = Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; }
+}
+
+async function completeOnboarding() {
+  await fetch(API + '/api/onboarding/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUser.id }) });
+  currentUser.onboarding_watched = 1;
+  showToast('Welcome! Onboarding complete.');
+  showPage('dashboard');
+}
+
+// ===== ENROLLMENT REPORT (Admin) =====
+async function renderEnrollmentReport(el) {
+  el.innerHTML = '<div class="loading">Loading enrollment report...</div>';
+  const data = await (await fetch(API + '/api/reports/enrollments')).json();
+  el.innerHTML = `
+    <h2 class="page-title">&#9783; Enrollment Report</h2>
+    <div class="stats-grid" style="margin-bottom:12px">
+      <div class="stat-card" style="border-left:4px solid #1a237e"><div class="stat-num">${data.summary.total}</div><div class="stat-label">Total Enrollments</div></div>
+      <div class="stat-card" style="border-left:4px solid #2e7d32"><div class="stat-num">${data.summary.active}</div><div class="stat-label">Active</div></div>
+      <div class="stat-card" style="border-left:4px solid #c62828"><div class="stat-num">${data.summary.dropped}</div><div class="stat-label">Dropped</div></div>
+      <div class="stat-card" style="border-left:4px solid #e65100"><div class="stat-num">$${data.summary.totalRevenue.toFixed(2)}</div><div class="stat-label">Total Revenue</div></div>
+      <div class="stat-card" style="border-left:4px solid #7b1fa2"><div class="stat-num">${data.summary.paidCount}</div><div class="stat-label">Paid</div></div>
+      <div class="stat-card" style="border-left:4px solid #00838f"><div class="stat-num">${data.summary.pendingCount}</div><div class="stat-label">Pending Payment</div></div>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>Student</th><th>Email</th><th>Phone</th><th>Course</th><th>Category</th><th>Fee</th><th>Amount Paid</th><th>Method</th><th>Payment</th><th>Progress</th><th>Status</th><th>Enrolled</th></tr></thead>
+      <tbody>${data.enrollments.length ? data.enrollments.map(e => `<tr>
+        <td>${e.student_name}</td><td>${e.student_email}</td><td>${e.student_phone || '-'}</td>
+        <td><a href="#" onclick="viewCourse('${e.course_id}')">${e.course_title}</a></td>
+        <td>${e.category_name || '-'}</td>
+        <td>$${(e.course_fee || 0).toFixed(2)}</td>
+        <td><b>$${(e.payment_amount || 0).toFixed(2)}</b></td>
+        <td>${(e.payment_method || '-').toUpperCase()}</td>
+        <td><span class="status-badge status-${e.payment_status === 'paid' ? 'active' : e.payment_status === 'free' ? 'active' : 'expired'}">${(e.payment_status || 'pending').toUpperCase()}</span></td>
+        <td><div class="progress-bar" style="width:80px"><div class="progress-fill" style="width:${e.progress_pct}%"></div></div> ${e.progress_pct}%</td>
+        <td><span class="status-badge status-${e.status}">${e.status}</span></td>
+        <td>${e.enrolled_at}</td>
+      </tr>`).join('') : '<tr><td colspan="12" style="text-align:center;padding:16px" class="muted">No enrollments found</td></tr>'}</tbody>
+    </table>`;
+}
+
+// ===== DUES REPORT (Admin) =====
+async function renderDuesReport(el) {
+  el.innerHTML = '<div class="loading">Loading dues report...</div>';
+  const data = await (await fetch(API + '/api/reports/dues')).json();
+  const studentList = Object.values(data.summary.byStudent);
+  el.innerHTML = `
+    <h2 class="page-title">&#9878; Dues Report</h2>
+    <div class="stats-grid" style="margin-bottom:12px">
+      <div class="stat-card" style="border-left:4px solid #c62828"><div class="stat-num">${data.summary.totalDues}</div><div class="stat-label">Pending Dues</div></div>
+      <div class="stat-card" style="border-left:4px solid #e65100"><div class="stat-num">$${data.summary.totalPendingAmount.toFixed(2)}</div><div class="stat-label">Total Pending Amount</div></div>
+    </div>
+    ${studentList.length ? `
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-header">Dues by Student</div>
+      <div class="card-body">
+        <table class="data-table">
+          <thead><tr><th>Student</th><th>Email</th><th>Phone</th><th>Enrollments</th><th>Total Dues</th></tr></thead>
+          <tbody>${studentList.map(s => `<tr>
+            <td><b>${s.name}</b></td><td>${s.email}</td><td>${s.phone || '-'}</td>
+            <td>${s.count}</td><td><b style="color:#c62828">$${s.amount.toFixed(2)}</b></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : ''}
+    <table class="data-table">
+      <thead><tr><th>Student</th><th>Email</th><th>Course</th><th>Amount Due</th><th>Method</th><th>Payment Status</th><th>Enrolled</th><th>Action</th></tr></thead>
+      <tbody>${data.dues.length ? data.dues.map(d => `<tr>
+        <td>${d.student_name}</td><td>${d.student_email}</td>
+        <td><a href="#" onclick="viewCourse('${d.course_id}')">${d.course_title}</a></td>
+        <td><b style="color:#c62828">$${(d.payment_amount || 0).toFixed(2)}</b></td>
+        <td>${(d.payment_method || '-').toUpperCase()}</td>
+        <td><span class="status-badge status-expired">${(d.payment_status || 'pending').toUpperCase()}</span></td>
+        <td>${d.enrolled_at}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="dropEnrollment(${d.id})">Drop</button></td>
+      </tr>`).join('') : '<tr><td colspan="8" style="text-align:center;padding:16px" class="muted">No pending dues - all clear!</td></tr>'}</tbody>
+    </table>`;
+}
+
+async function dropEnrollment(id) {
+  if (!confirm('Drop this enrollment?')) return;
+  await fetch(API + '/api/enrollments/' + id, { method: 'DELETE' });
+  showToast('Enrollment dropped');
+  renderDuesReport(document.getElementById('mainContent'));
+}
+
+// ===== ACCOUNT =====
+function renderAccount(el) {
+  el.innerHTML = `
+    <h2 class="page-title">My Account</h2>
+    <div class="card" style="max-width:500px">
+      <div class="card-body">
+        <div class="info-row"><span class="label">Name:</span> ${currentUser.first_name} ${currentUser.last_name}</div>
+        <div class="info-row"><span class="label">Email:</span> ${currentUser.email}</div>
+        <div class="info-row"><span class="label">Role:</span> <span class="badge badge-${currentUser.role}">${currentUser.role}</span></div>
+        <div class="info-row"><span class="label">ID:</span> ${currentUser.user_id}</div>
+      </div>
+    </div>`;
+}
+</script>
+</body>
+</html>
