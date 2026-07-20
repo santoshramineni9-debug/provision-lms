@@ -122,10 +122,6 @@ function initApp() {
       if (e.key === 'p' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
     });
   }
-  if (currentUser.role === 'student' && !currentUser.onboarding_watched) {
-    showPage('my-courses');
-    return;
-  }
   if (currentUser.role === 'admin' || currentUser.role === 'instructor') {
     navItems = [
       { id: 'dashboard', label: 'Dashboard', icon: '&#9632;' },
@@ -152,10 +148,6 @@ function initApp() {
     if (!navItems.find(p => p.id === 'account')) navItems.push({ id: 'account', label: currentUser.first_name, icon: '&#9881;' });
   }
   renderNav();
-  if (deferredPrompt && currentUser.role === 'student') {
-    var ib = document.getElementById('installBtn');
-    if (ib) ib.style.display = 'flex';
-  }
   showPage(navItems[0].id);
 }
 
