@@ -20,6 +20,8 @@
       <img src="/icon.svg" alt="Provision LMS" style="width:200px;margin:0 auto 12px;display:block">
       <h2>Student Learning Management System</h2>
       <div class="login-form">
+        <button class="btn btn-primary" onclick="guestLogin()" style="width:100%;padding:14px;font-size:16px">&#128218; Enter as Guest</button>
+        <div style="text-align:center;margin:12px 0;font-size:12px;color:#aaa">or</div>
         <input type="email" id="loginEmail" placeholder="Email" value="admin@lms.com">
         <input type="password" id="loginPassword" placeholder="Password" value="admin123">
         <button class="btn btn-primary" onclick="doLogin()">Sign In</button>
@@ -51,8 +53,24 @@
   </div>
 
   <div id="mainApp" style="display:none">
+    <div class="lms-header" id="lmsHeader">
+      <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileNav()">&#9776;</button>
+      <span class="header-title-text">Provision LMS</span>
+    </div>
     <nav class="topnav" id="topnav"></nav>
     <div class="main-content" id="mainContent"></div>
+  </div>
+
+  <!-- MOBILE NAV DRAWER -->
+  <div id="mobileNavOverlay" class="mobile-nav-overlay" onclick="toggleMobileNav()"></div>
+  <div id="mobileNavDrawer" class="mobile-nav-drawer">
+    <div class="mobile-nav-header">
+      <img src="/icon.svg" alt="Logo" style="height:40px">
+      <span>Provision LMS</span>
+      <button class="mobile-nav-close" onclick="toggleMobileNav()">&times;</button>
+    </div>
+    <div id="mobileNavContent" class="mobile-nav-content"></div>
+    <div class="mobile-nav-footer" id="mobileNavFooter"></div>
   </div>
 </div>
 
@@ -71,6 +89,13 @@ function showToast(msg, type) {
 }
 
 // ===== AUTH =====
+function guestLogin() {
+  currentUser = { id:0, email:'guest@lms.com', first_name:'Guest', last_name:'User', role:'student', page_access:'*' };
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  initApp();
+}
+
 async function doLogin() {
   const email = document.getElementById('loginEmail').value;
   const pw = document.getElementById('loginPassword').value;
@@ -1518,6 +1543,29 @@ if ('serviceWorker' in navigator) {
       document.body.appendChild(bar);
     }
   });
+}
+
+// ============ MOBILE HAMBURGER NAV ============
+var mobileNavOpen = false;
+function toggleMobileNav() {
+  mobileNavOpen = !mobileNavOpen;
+  document.getElementById('mobileNavOverlay').classList.toggle('active', mobileNavOpen);
+  document.getElementById('mobileNavDrawer').classList.toggle('active', mobileNavOpen);
+  if (mobileNavOpen) buildMobileNav();
+}
+function buildMobileNav() {
+  var h = '';
+  navItems.forEach(function(n) {
+    h += '<a onclick="mobileNavGo(\'' + n.id + '\')">' + n.icon + ' ' + n.label + '</a>';
+  });
+  h += '<a onclick="mobileNavGo(\'logout\')" style="color:#f44336;font-weight:600;margin-top:8px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px">&#10140; Logout</a>';
+  document.getElementById('mobileNavContent').innerHTML = h;
+  document.getElementById('mobileNavFooter').innerHTML = '<div style="padding:12px;font-size:11px;color:rgba(255,255,255,0.7)">&#128100; ' + (currentUser.first_name || currentUser.email) + ' (' + currentUser.role + ')</div>';
+}
+function mobileNavGo(page) {
+  toggleMobileNav();
+  if (page === 'logout') { logout(); return; }
+  showPage(page);
 }
 </script>
 </body>
