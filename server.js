@@ -30,6 +30,9 @@ app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email, password);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  if (user.role === 'student' && user.status === 'pending') return res.status(403).json({ error: 'Your account is pending admin approval. Please wait for approval before logging in.' });
+  if (user.role === 'student' && user.status === 'denied') return res.status(403).json({ error: 'Your account has been denied. Please contact admin.' });
+  if (user.role === 'student' && user.status === 'inactive') return res.status(403).json({ error: 'Your account has been deactivated. Please contact admin.' });
   currentUser = user;
   const { password: _, ...safe } = user;
   res.json(safe);
@@ -41,16 +44,25 @@ app.post('/api/auth/register', (req, res) => {
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (exists) return res.status(400).json({ error: 'Email already registered' });
   const userId = uid();
-  db.prepare('INSERT INTO users (user_id, email, password, first_name, last_name, role, phone, page_access) VALUES (?,?,?,?,?,?,?,?)').run(userId, email, password, first_name, last_name, 'student', phone || null, 'my-courses,catalog,my-quizzes,my-invoices,account');
+  db.prepare('INSERT INTO users (user_id, email, password, first_name, last_name, role, phone, status, page_access) VALUES (?,?,?,?,?,?,?,?,?)').run(userId, email, password, first_name, last_name, 'student', phone || null, 'pending', 'my-courses,catalog,my-quizzes,my-invoices,account');
   saveDB();
-  const user = db.prepare('SELECT * FROM users WHERE user_id = ?').get(userId);
-  const { password: _, ...safe } = user;
-  res.json(safe);
+  res.json({ message: 'Registration successful! Your account is pending admin approval. Please wait for approval before logging in.', status: 'pending' });
 });
 
 // ========== USERS (Admin) ==========
 app.get('/api/users', (req, res) => {
   const users = db.prepare('SELECT id, user_id, email, first_name, last_name, role, phone, status, page_access, created_at FROM users ORDER BY created_at DESC').all();
+  res.json(users);
+});
+
+// ========== USER APPROVAL (MUST be before :userId routes) ==========
+app.get('/api/users/pending', (req, res) => {
+  const users = db.prepare("SELECT id, user_id, email, first_name, last_name, phone, status, created_at FROM users WHERE role='student' AND status='pending' ORDER BY created_at DESC").all();
+  res.json(users);
+});
+
+app.get('/api/users/all-students', (req, res) => {
+  const users = db.prepare("SELECT id, user_id, email, first_name, last_name, phone, status, page_access, created_at FROM users WHERE role='student' ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'active' THEN 1 WHEN 'denied' THEN 2 WHEN 'inactive' THEN 3 END, created_at DESC").all();
   res.json(users);
 });
 
@@ -73,6 +85,18 @@ app.delete('/api/users/:userId', (req, res) => {
   res.json({ message: 'Deactivated' });
 });
 
+app.put('/api/users/:userId/approve', (req, res) => {
+  db.prepare("UPDATE users SET status = 'active' WHERE user_id = ?").run(req.params.userId);
+  saveDB();
+  res.json({ message: 'User approved' });
+});
+
+app.put('/api/users/:userId/deny', (req, res) => {
+  db.prepare("UPDATE users SET status = 'denied' WHERE user_id = ?").run(req.params.userId);
+  saveDB();
+  res.json({ message: 'User denied' });
+});
+
 app.post('/api/users', (req, res) => {
   if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   const { email, password, first_name, last_name, phone, role, page_access } = req.body;
@@ -83,6 +107,40 @@ app.post('/api/users', (req, res) => {
   db.prepare('INSERT INTO users (user_id, email, password, first_name, last_name, role, phone, page_access) VALUES (?,?,?,?,?,?,?,?)').run(userId, email, password, first_name, last_name, role || 'student', phone || null, page_access || 'my-courses,catalog,my-quizzes,my-invoices,account');
   saveDB();
   res.json({ message: 'Student created', user_id: userId });
+});
+
+// ========== CATEGORIES ==========
+
+// ========== ADMIN VIDEOS (YouTube for students) ==========
+app.get('/api/admin-videos', (req, res) => {
+  const vids = db.prepare("SELECT * FROM admin_videos ORDER BY created_at DESC").all();
+  res.json(vids);
+});
+
+app.post('/api/admin-videos', (req, res) => {
+  const { title, youtube_url, description, thumbnail } = req.body;
+  if (!title || !youtube_url) return res.status(400).json({ error: 'Title and YouTube URL required' });
+  const youtubeId = extractYouTubeId(youtube_url);
+  if (!youtubeId) return res.status(400).json({ error: 'Invalid YouTube URL' });
+  const videoId = 'AV' + String(Date.now()).slice(-6) + String(Math.floor(Math.random() * 1000));
+  db.prepare('INSERT INTO admin_videos (video_id, title, youtube_url, youtube_id, description, thumbnail) VALUES (?,?,?,?,?,?)').run(videoId, title, youtube_url, youtubeId, description || '', thumbnail || '');
+  saveDB();
+  res.json({ video_id: videoId, message: 'Video added' });
+});
+
+app.put('/api/admin-videos/:videoId', (req, res) => {
+  const { title, youtube_url, description, thumbnail } = req.body;
+  let youtubeId = null;
+  if (youtube_url) { youtubeId = extractYouTubeId(youtube_url); if (!youtubeId) return res.status(400).json({ error: 'Invalid YouTube URL' }); }
+  db.prepare('UPDATE admin_videos SET title=COALESCE(?,title), youtube_url=COALESCE(?,youtube_url), youtube_id=COALESCE(?,youtube_id), description=COALESCE(?,description), thumbnail=COALESCE(?,thumbnail) WHERE video_id=?').run(title, youtube_url, youtubeId, description, thumbnail, req.params.videoId);
+  saveDB();
+  res.json({ message: 'Updated' });
+});
+
+app.delete('/api/admin-videos/:videoId', (req, res) => {
+  db.prepare('DELETE FROM admin_videos WHERE video_id = ?').run(req.params.videoId);
+  saveDB();
+  res.json({ message: 'Deleted' });
 });
 
 // ========== CATEGORIES ==========
@@ -779,6 +837,24 @@ async function start() {
     key TEXT PRIMARY KEY,
     value TEXT
   )`).run();
+  // Admin videos table
+  db.prepare(`CREATE TABLE IF NOT EXISTS admin_videos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id TEXT UNIQUE,
+    title TEXT,
+    youtube_url TEXT,
+    youtube_id TEXT,
+    description TEXT DEFAULT '',
+    thumbnail TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+  )`).run();
+  // Ensure status column exists on users
+  try { db.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run(); } catch(e) {}
+  // Mark existing students as active (they were created before pending system)
+  db.prepare("UPDATE users SET status = 'active' WHERE role = 'student' AND status IS NULL").run();
+  db.prepare("UPDATE users SET status = 'active' WHERE role = 'student' AND status = ''").run();
+  db.prepare("UPDATE users SET status = 'active' WHERE role IN ('admin','instructor')").run();
+  saveDB();
   // Seed admin if not exists
   const admin = db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get();
   if (!admin) {
@@ -790,11 +866,11 @@ async function start() {
     db.prepare("INSERT INTO categories (name, description, color) VALUES (?,?,?)").run('Business', 'Business and management', '#e65100');
     db.prepare("INSERT INTO categories (name, description, color) VALUES (?,?,?)").run('Design', 'UI/UX and graphic design', '#7b1fa2');
     // Seed students
-    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'alice@student.com', 'student123', 'Alice', 'Johnson', 'student');
-    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'bob@student.com', 'student123', 'Bob', 'Smith', 'student');
-    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'carol@student.com', 'student123', 'Carol', 'Williams', 'student');
-    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'jbharatkumar155@gmail.com', 'student123', 'Bharat', 'Kumar', 'student');
-    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'ashokkumar.v1749@gmail.com', 'student123', 'Ashoke', 'Kumar', 'student');
+    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role, status) VALUES (?,?,?,?,?,?,?)").run(uid(), 'alice@student.com', 'student123', 'Alice', 'Johnson', 'student', 'active');
+    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role, status) VALUES (?,?,?,?,?,?,?)").run(uid(), 'bob@student.com', 'student123', 'Bob', 'Smith', 'student', 'active');
+    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role, status) VALUES (?,?,?,?,?,?,?)").run(uid(), 'carol@student.com', 'student123', 'Carol', 'Williams', 'student', 'active');
+    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role, status) VALUES (?,?,?,?,?,?,?)").run(uid(), 'jbharatkumar155@gmail.com', 'student123', 'Bharat', 'Kumar', 'student', 'active');
+    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role, status) VALUES (?,?,?,?,?,?,?)").run(uid(), 'ashokkumar.v1749@gmail.com', 'student123', 'Ashoke', 'Kumar', 'student', 'active');
     saveDB();
     console.log('Seeded admin, instructor, students, categories');
   }

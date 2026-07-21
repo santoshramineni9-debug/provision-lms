@@ -17,8 +17,9 @@
 <div id="app">
   <div id="loginOverlay" class="login-overlay">
     <div class="login-box">
-      <img src="/icon.svg" alt="Provision LMS" style="width:200px;margin:0 auto 12px;display:block">
-      <h2>Student Learning Management System</h2>
+      <img src="/icon.svg" alt="Provision LMS" style="width:180px;margin:0 auto 14px;display:block">
+      <h2 style="color:var(--text);font-size:14px;margin-bottom:2px">Student Learning Management System</h2>
+      <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px">Medical Coding &bull; Billing &bull; AR Training</p>
       <div class="login-form">
         <button class="btn btn-primary" onclick="guestLogin()" style="width:100%;padding:14px;font-size:16px">&#128218; Enter as Guest</button>
         <div style="text-align:center;margin:12px 0;font-size:12px;color:#aaa">or</div>
@@ -48,6 +49,12 @@
           <a href="#" onclick="showLogin()">Already have an account? Sign In</a>
         </div>
         <div id="regError" class="error-msg"></div>
+        <div id="regSuccess" style="display:none;background:#e8f5e9;border:1px solid #2e7d32;border-radius:8px;padding:14px;margin-top:10px;text-align:center">
+          <div style="font-size:32px;margin-bottom:8px">&#10004;</div>
+          <div style="font-weight:700;color:#2e7d32;font-size:14px">Registration Successful!</div>
+          <div style="color:#555;font-size:12px;margin-top:6px">Your account is <b>pending admin approval</b>. You will be able to login once admin approves your account.</div>
+          <button class="btn" onclick="showLogin()" style="margin-top:10px;padding:8px 20px;font-size:12px;background:#1a237e;color:#fff;border:none;border-radius:6px;cursor:pointer">Back to Login</button>
+        </div>
       </div>
     </div>
   </div>
@@ -55,7 +62,7 @@
   <div id="mainApp" style="display:none">
     <div class="lms-header" id="lmsHeader">
       <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileNav()">&#9776;</button>
-      <span class="header-title-text">Provision LMS</span>
+      <span class="header-title-text"><img src="/icon.svg" alt="Logo" style="height:28px"> Provision LMS</span>
     </div>
     <nav class="topnav" id="topnav"></nav>
     <div class="main-content" id="mainContent"></div>
@@ -90,7 +97,7 @@ function showToast(msg, type) {
 
 // ===== AUTH =====
 function guestLogin() {
-  currentUser = { id:0, email:'guest@lms.com', first_name:'Guest', last_name:'User', role:'student', page_access:'*' };
+  currentUser = { id:0, email:'guest@lms.com', first_name:'Guest', last_name:'', role:'guest', page_access:'guest-home' };
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('mainApp').style.display = 'block';
   initApp();
@@ -122,17 +129,35 @@ async function doRegister() {
     const res = await fetch(API + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     const r = await res.json();
     if (r.error) { document.getElementById('regError').textContent = r.error; return; }
-    currentUser = r;
-    document.getElementById('registerOverlay').style.display = 'none';
-    document.getElementById('mainApp').style.display = 'block';
-    initApp();
+    document.getElementById('regError').style.display = 'none';
+    document.querySelector('#registerOverlay .login-form').querySelectorAll('input,button').forEach(el => el.style.display = 'none');
+    document.getElementById('regSuccess').style.display = 'block';
   } catch(e) { document.getElementById('regError').textContent = 'Connection error'; }
 }
 
-function showRegister() { document.getElementById('loginOverlay').style.display = 'none'; document.getElementById('registerOverlay').style.display = 'flex'; }
+function showRegister() {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('registerOverlay').style.display = 'flex';
+  document.getElementById('regSuccess').style.display = 'none';
+  document.getElementById('regError').textContent = '';
+  document.querySelectorAll('#registerOverlay .login-form input').forEach(i => { i.value = ''; i.style.display = ''; });
+  document.querySelectorAll('#registerOverlay .login-form button').forEach(b => b.style.display = '');
+}
 function showLogin() { document.getElementById('registerOverlay').style.display = 'none'; document.getElementById('loginOverlay').style.display = 'flex'; }
 
-function logout() { currentUser = null; document.getElementById('mainApp').style.display = 'none'; document.getElementById('loginOverlay').style.display = 'flex'; }
+function logout() {
+  currentUser = null;
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('registerOverlay').style.display = 'none';
+  const rf = document.getElementById('registerOverlay');
+  if (rf) {
+    rf.querySelectorAll('input').forEach(i => i.value = '');
+    const rs = document.getElementById('regSuccess');
+    if (rs) rs.style.display = 'none';
+    rf.querySelectorAll('.login-form input,.login-form button').forEach(el => el.style.display = '');
+  }
+}
 
 // ===== APP INIT =====
 function initApp() {
@@ -148,9 +173,16 @@ function initApp() {
       if (e.key === 'p' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return false; }
     });
   }
-  if (currentUser.role === 'admin' || currentUser.role === 'instructor') {
+  if (currentUser.role === 'guest') {
+    navItems = [
+      { id: 'guest-home', label: 'Home', icon: '&#9776;' }
+    ];
+  } else if (currentUser.role === 'admin' || currentUser.role === 'instructor') {
     navItems = [
       { id: 'dashboard', label: 'Dashboard', icon: '&#9632;' },
+      { id: 'approve-users', label: 'Approve Users', icon: '&#10004;' },
+      { id: 'admin-videos', label: 'Training Videos', icon: '&#127909;' },
+      { id: 'daily-notes', label: 'Daily Notes', icon: '&#128221;' },
       { id: 'courses', label: 'Courses', icon: '&#9654;' },
       { id: 'categories', label: 'Categories', icon: '&#9776;' },
       { id: 'quizzes', label: 'Quizzes', icon: '&#9998;' },
@@ -159,7 +191,6 @@ function initApp() {
       { id: 'invoices', label: 'Invoices', icon: '&#128179;' },
       { id: 'report-enrollments', label: 'Enroll Report', icon: '&#9783;' },
       { id: 'report-dues', label: 'Dues Report', icon: '&#9878;' },
-      { id: 'daily-notes', label: 'Daily Notes', icon: '&#128221;' },
       { id: 'account', label: currentUser.first_name, icon: '&#9881;' }
     ];
   } else {
@@ -167,6 +198,7 @@ function initApp() {
     const allStudentPages = [
       { id: 'my-courses', label: 'My Courses', icon: '&#9654;' },
       { id: 'catalog', label: 'Browse Catalog', icon: '&#9776;' },
+      { id: 'admin-videos', label: 'Training Videos', icon: '&#127909;' },
       { id: 'daily-notes', label: 'Daily Notes', icon: '&#128221;' },
       { id: 'my-quizzes', label: 'My Quizzes', icon: '&#9998;' },
       { id: 'my-invoices', label: 'My Invoices', icon: '&#128179;' },
@@ -195,7 +227,8 @@ function showPage(pageId) {
       'youtube-player': ['my-courses', 'catalog'],
       'take-quiz': ['my-quizzes'],
       'quiz-results': ['my-quizzes'],
-      'onboarding': ['my-courses', 'catalog', 'my-quizzes', 'my-invoices', 'account']
+      'onboarding': ['my-courses', 'catalog', 'my-quizzes', 'my-invoices', 'account'],
+      'guest-home': ['guest-home']
     };
     if (subPages[pageId]) {
       const parents = subPages[pageId];
@@ -210,6 +243,9 @@ function showPage(pageId) {
   const content = document.getElementById('mainContent');
   switch(pageId) {
     case 'dashboard': renderAdminDashboard(content); break;
+    case 'guest-home': renderGuestHome(content); break;
+    case 'approve-users': renderApproveUsers(content); break;
+    case 'admin-videos': renderAdminVideos(content); break;
     case 'courses': renderAdminCourses(content); break;
     case 'categories': renderCategories(content); break;
     case 'quizzes': renderAdminQuizzes(content); break;
@@ -1206,6 +1242,194 @@ async function renderMyCourses(el) {
         <p style="color:#666;font-size:13px;margin:8px 0 16px">You haven't enrolled in any courses yet. Browse our catalog to find courses that interest you.</p>
         <button class="btn btn-primary" onclick="showPage('catalog')" style="padding:8px 20px;font-size:13px">&#128269; Browse Catalog</button>
       </div>`}`;
+}
+
+// ===== GUEST HOME =====
+async function renderGuestHome(el) {
+  const annRes = await fetch(API + '/api/pms-sync/announcements').catch(()=>({json:()=>({})}));
+  const annData = await annRes.json();
+  el.innerHTML = `
+    <div class="guest-hero">
+      <div style="font-size:48px;margin-bottom:12px">&#127891;</div>
+      <h1>Welcome to Provision LMS</h1>
+      <p>Professional Medical Coding, Billing &amp; AR Training Platform. Learn from industry experts with real-world practice.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;position:relative">
+        <button class="btn" onclick="showRegister()" style="background:var(--accent);color:#fff;border-color:var(--accent);padding:12px 28px;font-size:15px;font-weight:700;border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,200,83,0.4)">&#128221; Register Now</button>
+        <button class="btn" onclick="showLogin()" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);padding:12px 28px;font-size:15px;font-weight:700;border-radius:var(--radius)">&#128274; Sign In</button>
+      </div>
+    </div>
+    ${annData.announcements ? '<div style="background:#fff3e0;border-left:4px solid #e65100;padding:14px 18px;border-radius:0 var(--radius) var(--radius) 0;margin-bottom:20px;font-size:13px;box-shadow:var(--shadow)"><b>&#128227; Announcement:</b> '+annData.announcements+'</div>' : ''}
+    <h2 style="font-size:20px;color:var(--primary-dark);margin-bottom:16px;font-weight:800;text-align:center">What You Will Learn</h2>
+    <div class="guest-features">
+      <div class="guest-feature">
+        <div class="icon">&#128138;</div>
+        <h3>Medical Coding</h3>
+        <p>Learn ICD-10, CPT, HCPCS coding standards. Master diagnosis and procedure coding for accurate claims.</p>
+      </div>
+      <div class="guest-feature">
+        <div class="icon">&#128176;</div>
+        <h3>Revenue Cycle Management</h3>
+        <p>Complete RCM lifecycle from patient registration to payment posting. Maximize revenue recovery.</p>
+      </div>
+      <div class="guest-feature">
+        <div class="icon">&#128222;</div>
+        <h3>AR Calling</h3>
+        <p>Real-world AR calling practice with mock call scripts, denial management and follow-up strategies.</p>
+      </div>
+      <div class="guest-feature">
+        <div class="icon">&#127909;</div>
+        <h3>Video Training</h3>
+        <p>Watch recorded sessions and daily training videos. Practice at your own pace with expert guidance.</p>
+      </div>
+      <div class="guest-feature">
+        <div class="icon">&#128221;</div>
+        <h3>Daily Notes</h3>
+        <p>Access daily running notes from live sessions. Stay updated with the latest techniques and workflows.</p>
+      </div>
+      <div class="guest-feature">
+        <div class="icon">&#128203;</div>
+        <h3>Practice Billing</h3>
+        <p>Hands-on billing practice with real scenarios. Learn CMS-1500, 837P, eligibility verification.</p>
+      </div>
+    </div>
+    ${annData.demoLink && annData.demoLink.link ? '<div style="text-align:center;margin-top:28px"><a href="'+annData.demoLink.link+'" target="_blank" class="btn btn-success" style="padding:14px 32px;font-size:16px;border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,200,83,0.4)">&#127909; Join Free Demo Class - '+annData.demoLink.schedule+'</a></div>' : ''}`;
+}
+
+// ===== APPROVE USERS =====
+async function renderApproveUsers(el) {
+  el.innerHTML = '<div class="loading">Loading users...</div>';
+  try {
+    const students = await (await fetch(API + '/api/users/all-students')).json();
+    const pending = students.filter(s => s.status === 'pending');
+    const active = students.filter(s => s.status === 'active');
+    const denied = students.filter(s => s.status === 'denied' || s.status === 'inactive');
+
+    el.innerHTML = `
+      <div class="page-header">
+        <h2 class="page-title">&#10004; User Management</h2>
+      </div>
+      <div class="stats-grid" style="margin-bottom:16px">
+        <div class="stat-card" style="border-left:4px solid #fb8c00"><div class="stat-num" style="color:#fb8c00">${pending.length}</div><div class="stat-label">Pending Approval</div></div>
+        <div class="stat-card" style="border-left:4px solid var(--accent-dark)"><div class="stat-num" style="color:var(--accent-dark)">${active.length}</div><div class="stat-label">Active Students</div></div>
+        <div class="stat-card" style="border-left:4px solid #e53935"><div class="stat-num" style="color:#e53935">${denied.length}</div><div class="stat-label">Denied / Inactive</div></div>
+      </div>
+
+      ${pending.length ? '<h3 style="color:#e65100;margin-bottom:12px;font-weight:700;font-size:16px">&#9888; Pending Approval ('+pending.length+')</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-bottom:24px">'+pending.map(u => `
+        <div class="user-card pending">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+            <div>
+              <div class="user-name">${u.first_name} ${u.last_name}</div>
+              <div class="user-email">&#128231; ${u.email}</div>
+              ${u.phone ? '<div class="user-email">&#128222; '+u.phone+'</div>' : ''}
+            </div>
+            <span class="badge badge-pending">Pending</span>
+          </div>
+          <div class="user-date">Registered: ${u.created_at || 'Unknown'}</div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-success btn-sm" onclick="approveUser('${u.user_id}')">&#10004; Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="denyUser('${u.user_id}')">&#10008; Deny</button>
+          </div>
+        </div>`).join('')+'</div>' : ''}
+
+      <h3 style="color:var(--primary);margin-bottom:12px;font-weight:700;font-size:16px">&#9787; All Students (${active.length} active)</h3>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${students.map(u => `
+            <tr>
+              <td data-label="Name"><b>${u.first_name} ${u.last_name}</b></td>
+              <td data-label="Email">${u.email}</td>
+              <td data-label="Phone">${u.phone || '-'}</td>
+              <td data-label="Status"><span class="status-badge status-${u.status}">${u.status}</span></td>
+              <td data-label="Actions">
+                ${u.status === 'pending' ? '<button class="btn btn-success btn-sm" onclick="approveUser(\''+u.user_id+'\')">&#10004; Approve</button> ' : ''}
+                ${u.status === 'active' ? '<button class="btn btn-danger btn-sm" onclick="denyUser(\''+u.user_id+'\')">&#10008; Deny</button> ' : ''}
+                ${(u.status === 'denied' || u.status === 'inactive') ? '<button class="btn btn-success btn-sm" onclick="approveUser(\''+u.user_id+'\')">&#10004; Reactivate</button>' : ''}
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) { el.innerHTML = '<div class="empty-state"><h3>Error loading users</h3><p>'+e.message+'</p></div>'; }
+}
+
+async function approveUser(userId) {
+  await fetch(API + '/api/users/' + userId + '/approve', { method: 'PUT' });
+  showToast('User approved!');
+  renderApproveUsers(document.getElementById('mainContent'));
+}
+async function denyUser(userId) {
+  if (!confirm('Deny this user?')) return;
+  await fetch(API + '/api/users/' + userId + '/deny', { method: 'PUT' });
+  showToast('User denied', 'error');
+  renderApproveUsers(document.getElementById('mainContent'));
+}
+
+// ===== ADMIN VIDEOS (YouTube Training Videos) =====
+async function renderAdminVideos(el) {
+  el.innerHTML = '<div class="loading">Loading videos...</div>';
+  try {
+    const vids = await (await fetch(API + '/api/admin-videos')).json();
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'instructor';
+
+    let html = '<div class="page-header"><h2 class="page-title">&#127909; Training Videos</h2>';
+    if (isAdmin) html += '<button class="btn btn-primary" onclick="showAddVideoModal()">+ Add Video</button>';
+    html += '</div>';
+
+    if (vids.length) {
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">';
+      vids.forEach(function(v) {
+        const ytId = v.youtube_id || '';
+        html += '<div class="video-card">';
+        html += '<div class="video-thumb"><iframe src="https://www.youtube.com/embed/'+ytId+'" allowfullscreen></iframe></div>';
+        html += '<div class="video-info"><h4>'+v.title+'</h4>';
+        if (v.description) html += '<p>'+v.description+'</p>';
+        if (isAdmin) html += '<div style="margin-top:8px;display:flex;gap:6px"><button class="btn btn-danger btn-sm" onclick="deleteAdminVideo(\''+v.video_id+'\')">&#128465; Delete</button></div>';
+        html += '</div></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="empty-state"><div style="font-size:48px;margin-bottom:12px">&#127909;</div><h3>No Videos Yet</h3><p>Add YouTube training videos for students to watch.</p></div>';
+    }
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="empty-state"><h3>Error loading videos</h3></div>'; }
+}
+
+function showAddVideoModal() {
+  const overlay = document.createElement('div');
+  overlay.id = 'videoModal';
+  overlay.className = 'login-overlay';
+  overlay.style.cssText = 'position:fixed;z-index:10000;background:rgba(0,0,0,0.5)';
+  overlay.innerHTML = '<div class="login-box" style="max-width:480px"><h2 style="font-size:18px;color:var(--primary);font-weight:800">&#127909; Add Training Video</h2><div class="login-form" style="text-align:left"><div class="form-group"><label>Title *</label><input type="text" id="vidTitle" placeholder="e.g. AR Calling Basics - Day 1"></div><div class="form-group"><label>YouTube URL *</label><input type="text" id="vidUrl" placeholder="https://youtube.com/watch?v=..."></div><div class="form-group"><label>Description</label><textarea id="vidDesc" rows="2" placeholder="Brief description..." style="padding:10px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:13px"></textarea></div><div style="display:flex;gap:10px;margin-top:6px"><button class="btn btn-primary" onclick="saveAdminVideo()">Save Video</button><button class="btn" onclick="closeVideoModal()">Cancel</button></div><div id="vidError" class="error-msg" style="margin-top:6px"></div></div></div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeVideoModal(); });
+}
+
+function closeVideoModal() {
+  const m = document.getElementById('videoModal');
+  if (m) m.remove();
+}
+
+async function saveAdminVideo() {
+  const title = document.getElementById('vidTitle').value.trim();
+  const url = document.getElementById('vidUrl').value.trim();
+  const desc = document.getElementById('vidDesc').value.trim();
+  if (!title || !url) { document.getElementById('vidError').textContent = 'Title and URL required'; return; }
+  try {
+    const res = await fetch(API + '/api/admin-videos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title, youtube_url:url, description:desc}) });
+    const r = await res.json();
+    if (r.error) { document.getElementById('vidError').textContent = r.error; return; }
+    closeVideoModal();
+    showToast('Video added!');
+    renderAdminVideos(document.getElementById('mainContent'));
+  } catch(e) { document.getElementById('vidError').textContent = 'Error: ' + e.message; }
+}
+
+async function deleteAdminVideo(videoId) {
+  if (!confirm('Delete this video?')) return;
+  await fetch(API + '/api/admin-videos/' + videoId, { method: 'DELETE' });
+  showToast('Video deleted');
+  renderAdminVideos(document.getElementById('mainContent'));
 }
 
 // ===== DAILY VIDEO + NOTES (Synced from PMS) =====
