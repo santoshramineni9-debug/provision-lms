@@ -751,6 +751,7 @@ async function start() {
     db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'bob@student.com', 'student123', 'Bob', 'Smith', 'student');
     db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'carol@student.com', 'student123', 'Carol', 'Williams', 'student');
     db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'jbharatkumar155@gmail.com', 'student123', 'Bharat', 'Kumar', 'student');
+    db.prepare("INSERT INTO users (user_id, email, password, first_name, last_name, role) VALUES (?,?,?,?,?,?)").run(uid(), 'ashokkumar.v1749@gmail.com', 'student123', 'Ashoke', 'Kumar', 'student');
     saveDB();
     console.log('Seeded admin, instructor, students, categories');
   }
