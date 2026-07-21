@@ -705,6 +705,49 @@ app.get('/api/stats', (req, res) => {
   res.json({ totalStudents, totalCourses, totalVideos, totalEnrollments, totalQuizzes, recentEnrollments, topCourses });
 });
 
+// ============ PMS SYNC ============
+const PMS_URL = process.env.PMS_URL || 'http://localhost:3000';
+
+app.get('/api/pms-sync/courses', async (req, res) => {
+  try {
+    const r = await fetch(PMS_URL + '/api/site-courses');
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.json([]); }
+});
+
+app.get('/api/pms-sync/videos', async (req, res) => {
+  try {
+    const r = await fetch(PMS_URL + '/api/site-content');
+    const data = await r.json();
+    res.json(data.videos || []);
+  } catch(e) { res.json([]); }
+});
+
+app.get('/api/pms-sync/running-notes', async (req, res) => {
+  try {
+    const r = await fetch(PMS_URL + '/api/site-running-notes');
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.json([]); }
+});
+
+app.get('/api/pms-sync/pdfs', async (req, res) => {
+  try {
+    const r = await fetch(PMS_URL + '/api/site-content');
+    const data = await r.json();
+    res.json(data.pdfs || []);
+  } catch(e) { res.json([]); }
+});
+
+app.get('/api/pms-sync/announcements', async (req, res) => {
+  try {
+    const r = await fetch(PMS_URL + '/api/site-content');
+    const data = await r.json();
+    res.json({ announcements: data.announcements || '', demoLink: data.demoLink || {} });
+  } catch(e) { res.json({ announcements: '', demoLink: {} }); }
+});
+
 // Catch-all
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
