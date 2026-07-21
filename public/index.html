@@ -21,10 +21,8 @@
       <h2 style="color:var(--text);font-size:14px;margin-bottom:2px">Student Learning Management System</h2>
       <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px">Medical Coding &bull; Billing &bull; AR Training</p>
       <div class="login-form">
-        <button class="btn btn-primary" onclick="guestLogin()" style="width:100%;padding:14px;font-size:16px">&#128218; Enter as Guest</button>
-        <div style="text-align:center;margin:12px 0;font-size:12px;color:#aaa">or</div>
-        <input type="email" id="loginEmail" placeholder="Email" value="admin@lms.com">
-        <input type="password" id="loginPassword" placeholder="Password" value="admin123">
+        <input type="email" id="loginEmail" placeholder="Email">
+        <input type="password" id="loginPassword" placeholder="Password">
         <button class="btn btn-primary" onclick="doLogin()">Sign In</button>
         <div class="login-links">
           <a href="#" onclick="showRegister()">Create Account</a>
@@ -106,6 +104,7 @@ function guestLogin() {
 async function doLogin() {
   const email = document.getElementById('loginEmail').value;
   const pw = document.getElementById('loginPassword').value;
+  if (!email || !pw) { document.getElementById('loginError').textContent = 'Enter email and password'; return; }
   try {
     const res = await fetch(API + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw }) });
     const data = await res.json();
@@ -157,6 +156,10 @@ function logout() {
     if (rs) rs.style.display = 'none';
     rf.querySelectorAll('.login-form input,.login-form button').forEach(el => el.style.display = '');
   }
+  // Reset login form
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').textContent = '';
 }
 
 // ===== APP INIT =====
@@ -198,13 +201,13 @@ function initApp() {
     const allStudentPages = [
       { id: 'my-courses', label: 'My Courses', icon: '&#9654;' },
       { id: 'catalog', label: 'Browse Catalog', icon: '&#9776;' },
-      { id: 'admin-videos', label: 'Training Videos', icon: '&#127909;' },
-      { id: 'daily-notes', label: 'Daily Notes', icon: '&#128221;' },
+      { id: 'admin-videos', label: 'Training Videos', icon: '&#127909;', always: true },
+      { id: 'daily-notes', label: 'Daily Notes', icon: '&#128221;', always: true },
       { id: 'my-quizzes', label: 'My Quizzes', icon: '&#9998;' },
       { id: 'my-invoices', label: 'My Invoices', icon: '&#128179;' },
-      { id: 'account', label: currentUser.first_name, icon: '&#9881;' }
+      { id: 'account', label: currentUser.first_name, icon: '&#9881;', always: true }
     ];
-    navItems = allowed ? allStudentPages.filter(p => allowed.includes(p.id)) : allStudentPages;
+    navItems = allowed ? allStudentPages.filter(p => p.always || allowed.includes(p.id)) : allStudentPages;
     if (!navItems.find(p => p.id === 'account')) navItems.push({ id: 'account', label: currentUser.first_name, icon: '&#9881;' });
   }
   renderNav();
@@ -1064,6 +1067,8 @@ async function deleteCategory(id) {
 const ALL_PAGES = [
   { id: 'my-courses', label: 'My Courses' },
   { id: 'catalog', label: 'Browse Catalog' },
+  { id: 'admin-videos', label: 'Training Videos' },
+  { id: 'daily-notes', label: 'Daily Notes' },
   { id: 'my-quizzes', label: 'My Quizzes' },
   { id: 'my-invoices', label: 'My Invoices' },
   { id: 'account', label: 'Account' },
@@ -1105,7 +1110,7 @@ async function renderStudents(el) {
       </div>
       <div style="margin-top:6px">
         <b style="font-size:11px">Screen Access:</b>
-        <div id="newStuPageAccess" style="margin-top:3px">${renderPageAccessCheckboxes('my-courses,catalog,my-quizzes,my-invoices,account')}</div>
+        <div id="newStuPageAccess" style="margin-top:3px">${renderPageAccessCheckboxes('my-courses,catalog,admin-videos,daily-notes,my-quizzes,my-invoices,account')}</div>
       </div>
       <div style="margin-top:6px">
         <button class="btn btn-primary btn-sm" onclick="saveNewStudent()">Save</button>
@@ -1171,6 +1176,8 @@ async function editStudent(userId) {
       </select>
       <select id="editStuStatus" style="padding:4px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px">
         <option value="active" ${u.status==='active'?'selected':''}>Active</option>
+        <option value="pending" ${u.status==='pending'?'selected':''}>Pending</option>
+        <option value="denied" ${u.status==='denied'?'selected':''}>Denied</option>
         <option value="inactive" ${u.status==='inactive'?'selected':''}>Inactive</option>
       </select>
     </div>
@@ -1372,19 +1379,27 @@ async function renderAdminVideos(el) {
     const vids = await (await fetch(API + '/api/admin-videos')).json();
     const isAdmin = currentUser.role === 'admin' || currentUser.role === 'instructor';
 
-    let html = '<div class="page-header"><h2 class="page-title">&#127909; Training Videos</h2>';
-    if (isAdmin) html += '<button class="btn btn-primary" onclick="showAddVideoModal()">+ Add Video</button>';
-    html += '</div>';
+    let html = '<div class="page-header"><h2 class="page-title">&#127909; Training Videos</h2></div>';
+
+    if (isAdmin) {
+      html += '<div class="card" style="margin-bottom:20px"><div class="card-header">&#128221; Add New Video</div><div class="card-body">';
+      html += '<div class="form-grid"><div class="form-group"><label>Title *</label><input type="text" id="vidTitle" placeholder="e.g. AR Calling Basics - Day 1"></div><div class="form-group"><label>YouTube URL *</label><input type="text" id="vidUrl" placeholder="https://youtube.com/watch?v=..." oninput="previewYouTubeThumb()"></div></div>';
+      html += '<div class="form-group" style="margin-top:8px"><label>Description</label><textarea id="vidDesc" rows="2" placeholder="Brief description..."></textarea></div>';
+      html += '<div id="vidThumbPreview" style="margin-top:8px;display:none"><img id="vidThumbImg" src="" style="width:200px;border-radius:8px;border:2px solid var(--border)"></div>';
+      html += '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary" onclick="saveAdminVideo()">&#10004; Save Video</button><button class="btn" onclick="clearVideoForm()">Clear</button></div>';
+      html += '<div id="vidError" style="color:#c62828;font-size:12px;margin-top:6px"></div>';
+      html += '</div></div>';
+    }
 
     if (vids.length) {
       html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">';
       vids.forEach(function(v) {
         const ytId = v.youtube_id || '';
         html += '<div class="video-card">';
-        html += '<div class="video-thumb"><iframe src="https://www.youtube.com/embed/'+ytId+'" allowfullscreen></iframe></div>';
+        html += '<div class="video-thumb"><iframe src="https://www.youtube.com/embed/'+ytId+'" allowfullscreen loading="lazy"></iframe></div>';
         html += '<div class="video-info"><h4>'+v.title+'</h4>';
         if (v.description) html += '<p>'+v.description+'</p>';
-        if (isAdmin) html += '<div style="margin-top:8px;display:flex;gap:6px"><button class="btn btn-danger btn-sm" onclick="deleteAdminVideo(\''+v.video_id+'\')">&#128465; Delete</button></div>';
+        if (isAdmin) html += '<div style="margin-top:8px"><button class="btn btn-danger btn-sm" onclick="deleteAdminVideo(\''+v.video_id+'\')">&#128465; Delete</button></div>';
         html += '</div></div>';
       });
       html += '</div>';
@@ -1395,34 +1410,40 @@ async function renderAdminVideos(el) {
   } catch(e) { el.innerHTML = '<div class="empty-state"><h3>Error loading videos</h3></div>'; }
 }
 
-function showAddVideoModal() {
-  const overlay = document.createElement('div');
-  overlay.id = 'videoModal';
-  overlay.className = 'login-overlay';
-  overlay.style.cssText = 'position:fixed;z-index:10000;background:rgba(0,0,0,0.5)';
-  overlay.innerHTML = '<div class="login-box" style="max-width:480px"><h2 style="font-size:18px;color:var(--primary);font-weight:800">&#127909; Add Training Video</h2><div class="login-form" style="text-align:left"><div class="form-group"><label>Title *</label><input type="text" id="vidTitle" placeholder="e.g. AR Calling Basics - Day 1"></div><div class="form-group"><label>YouTube URL *</label><input type="text" id="vidUrl" placeholder="https://youtube.com/watch?v=..."></div><div class="form-group"><label>Description</label><textarea id="vidDesc" rows="2" placeholder="Brief description..." style="padding:10px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:13px"></textarea></div><div style="display:flex;gap:10px;margin-top:6px"><button class="btn btn-primary" onclick="saveAdminVideo()">Save Video</button><button class="btn" onclick="closeVideoModal()">Cancel</button></div><div id="vidError" class="error-msg" style="margin-top:6px"></div></div></div>';
-  document.body.appendChild(overlay);
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeVideoModal(); });
+function previewYouTubeThumb() {
+  var url = document.getElementById('vidUrl').value;
+  var m = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  var preview = document.getElementById('vidThumbPreview');
+  var img = document.getElementById('vidThumbImg');
+  if (m) {
+    img.src = 'https://img.youtube.com/vi/' + m[1] + '/mqdefault.jpg';
+    preview.style.display = 'block';
+  } else {
+    preview.style.display = 'none';
+  }
 }
 
-function closeVideoModal() {
-  const m = document.getElementById('videoModal');
-  if (m) m.remove();
+function clearVideoForm() {
+  document.getElementById('vidTitle').value = '';
+  document.getElementById('vidUrl').value = '';
+  document.getElementById('vidDesc').value = '';
+  document.getElementById('vidError').textContent = '';
+  document.getElementById('vidThumbPreview').style.display = 'none';
 }
 
 async function saveAdminVideo() {
-  const title = document.getElementById('vidTitle').value.trim();
-  const url = document.getElementById('vidUrl').value.trim();
-  const desc = document.getElementById('vidDesc').value.trim();
-  if (!title || !url) { document.getElementById('vidError').textContent = 'Title and URL required'; return; }
+  var title = document.getElementById('vidTitle').value.trim();
+  var url = document.getElementById('vidUrl').value.trim();
+  var desc = document.getElementById('vidDesc').value.trim();
+  if (!title || !url) { document.getElementById('vidError').textContent = 'Title and YouTube URL required'; return; }
+  var btn = event.target; btn.disabled = true; btn.textContent = 'Saving...';
   try {
-    const res = await fetch(API + '/api/admin-videos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title, youtube_url:url, description:desc}) });
-    const r = await res.json();
-    if (r.error) { document.getElementById('vidError').textContent = r.error; return; }
-    closeVideoModal();
+    var res = await fetch(API + '/api/admin-videos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title:title, youtube_url:url, description:desc}) });
+    var r = await res.json();
+    if (r.error) { document.getElementById('vidError').textContent = r.error; btn.disabled = false; btn.textContent = 'Save Video'; return; }
     showToast('Video added!');
     renderAdminVideos(document.getElementById('mainContent'));
-  } catch(e) { document.getElementById('vidError').textContent = 'Error: ' + e.message; }
+  } catch(e) { document.getElementById('vidError').textContent = 'Error: ' + e.message; btn.disabled = false; btn.textContent = 'Save Video'; }
 }
 
 async function deleteAdminVideo(videoId) {
@@ -1444,62 +1465,101 @@ async function renderDailyNotes(el) {
     const notes = await notesRes.json();
     const pmsVideos = await vidRes.json();
     const annData = await annRes.json();
+    var isAdmin = currentUser.role === 'admin' || currentUser.role === 'instructor';
 
-    let html = '<h2 class="page-title">Daily Video + Notes</h2>';
+    var html = '<div class="page-header"><h2 class="page-title">&#128221; Daily Video + Notes</h2></div>';
+
+    if (isAdmin) {
+      html += '<div class="card" style="margin-bottom:20px"><div class="card-header">&#128221; Add Daily Note</div><div class="card-body">';
+      html += '<div class="form-grid"><div class="form-group"><label>Date *</label><input type="date" id="noteDate" value="'+new Date().toISOString().slice(0,10)+'"></div><div class="form-group"><label>Course</label><select id="noteCourse"><option value="">Select course...</option><option value="AR Calling">AR Calling</option><option value="Medical Coding">Medical Coding</option><option value="Billing">Billing</option><option value="Revenue Cycle">Revenue Cycle</option></select></div></div>';
+      html += '<div class="form-grid" style="margin-top:8px"><div class="form-group"><label>Video Title</label><input type="text" id="noteVideoTitle" placeholder="e.g. Day 1 - AR Basics"></div><div class="form-group"><label>YouTube URL</label><input type="text" id="noteVideoUrl" placeholder="https://youtube.com/watch?v=..."></div></div>';
+      html += '<div class="form-group" style="margin-top:8px"><label>Running Notes</label><textarea id="noteText" rows="4" placeholder="Write today\'s training notes here..."></textarea></div>';
+      html += '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary" onclick="saveDailyNote()">&#10004; Save Note</button><button class="btn" onclick="clearNoteForm()">Clear</button></div>';
+      html += '<div id="noteError" style="color:#c62828;font-size:12px;margin-top:6px"></div>';
+      html += '</div></div>';
+    }
 
     if (annData.announcements) {
-      html += `<div style="background:#fff3e0;border-left:4px solid #e65100;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:16px;font-size:13px"><b>&#128227; Announcement:</b> ${annData.announcements}</div>`;
+      html += '<div style="background:#fff3e0;border-left:4px solid #e65100;padding:14px 18px;border-radius:0 var(--radius) var(--radius) 0;margin-bottom:16px;font-size:13px;box-shadow:var(--shadow)"><b>&#128227; Announcement:</b> ' + annData.announcements + '</div>';
     }
 
     if (annData.demoLink && annData.demoLink.link) {
-      html += `<div style="background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border-radius:10px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:12px"><div style="font-size:2em">&#127909;</div><div><div style="font-weight:700;color:#1a237e;font-size:15px">${annData.demoLink.title || 'Demo Class'}</div><div style="font-size:12px;color:#666">${annData.demoLink.schedule || ''}</div></div><a href="${annData.demoLink.link}" target="_blank" style="margin-left:auto;background:#25d366;color:#fff;padding:8px 18px;border-radius:6px;text-decoration:none;font-weight:700;white-space:nowrap">Join Demo</a></div>`;
+      html += '<div style="background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border-radius:var(--radius);padding:18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow)"><div style="font-size:2em">&#127909;</div><div><div style="font-weight:700;color:#1a237e;font-size:15px">' + (annData.demoLink.title || 'Demo Class') + '</div><div style="font-size:12px;color:#666">' + (annData.demoLink.schedule || '') + '</div></div><a href="' + annData.demoLink.link + '" target="_blank" style="margin-left:auto;background:#25d366;color:#fff;padding:10px 20px;border-radius:var(--radius-sm);text-decoration:none;font-weight:700;white-space:nowrap">Join Demo</a></div>';
     }
 
     if (notes.length) {
       notes.forEach(function(n) {
         if (n.visible === false) return;
-        html += `<div style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04)">`;
-        html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-weight:700;color:#00695c;font-size:15px">&#128197; ${n.date || 'No Date'}</div>`;
-        if (n.course) html += `<span style="background:#e0f2f1;color:#00695c;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600">${n.course}</span>`;
-        html += `</div>`;
+        html += '<div class="note-card">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="note-date">&#128197; ' + (n.date || 'No Date') + '</div>';
+        if (n.course) html += '<span class="note-course">' + n.course + '</span>';
+        html += '</div>';
         if (n.video_url) {
-          const ytId = n.video_url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
-          const embedUrl = ytId ? 'https://www.youtube.com/embed/' + ytId[1] : n.video_url;
-          html += `<div style="margin-bottom:10px"><div style="font-weight:600;color:#333;margin-bottom:6px">&#127909; ${n.video_title || 'Daily Video'}</div>`;
-          html += `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:8px"><iframe src="${embedUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen></iframe></div></div>`;
+          var ytM = n.video_url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+          var embedUrl = ytM ? 'https://www.youtube.com/embed/' + ytM[1] : n.video_url;
+          html += '<div style="margin-bottom:10px"><div class="note-video-title">&#127909; ' + (n.video_title || 'Daily Video') + '</div>';
+          html += '<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:var(--radius-sm)"><iframe src="' + embedUrl + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen loading="lazy"></iframe></div></div>';
         }
         if (n.notes) {
-          html += `<div style="background:#f5f5f5;border-radius:8px;padding:12px;margin-bottom:10px"><div style="font-weight:600;color:#333;margin-bottom:6px">&#128221; Running Notes</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#444">${n.notes}</div></div>`;
+          html += '<div class="note-text">' + n.notes + '</div>';
         }
         if (n.images && n.images.length) {
-          html += `<div style="display:flex;gap:8px;flex-wrap:wrap">`;
+          html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
           n.images.forEach(function(img) {
-            html += `<img src="${img}" style="max-width:200px;max-height:160px;border-radius:6px;border:1px solid #eee;cursor:pointer" onclick="window.open('${img}','_blank')">`;
+            html += '<img src="' + img + '" style="max-width:200px;max-height:160px;border-radius:var(--radius-sm);border:1px solid var(--border);cursor:pointer" onclick="window.open(\'' + img + '\',\'_blank\')">';
           });
-          html += `</div>`;
+          html += '</div>';
         }
-        html += `</div>`;
+        html += '</div>';
       });
     } else {
-      html += `<div style="text-align:center;padding:60px 20px;background:#f8f9fa;border-radius:8px;border:2px dashed #ddd"><div style="font-size:48px;margin-bottom:12px">&#128221;</div><h3 style="color:#333">No Daily Notes Yet</h3><p style="color:#666;font-size:13px;margin-top:8px">Daily video + notes will appear here once added by admin from the PMS.</p></div>`;
+      html += '<div class="empty-state"><div style="font-size:48px;margin-bottom:12px">&#128221;</div><h3>No Daily Notes Yet</h3><p>Daily video + notes will appear here once added by admin.</p></div>';
     }
 
     if (pmsVideos.length) {
-      html += `<h3 style="margin-top:24px;margin-bottom:12px;color:#1a237e">&#127909; Demo Videos</h3>`;
-      html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">`;
+      html += '<h3 style="margin-top:24px;margin-bottom:14px;color:#1a237e;font-weight:800">&#127909; Demo Videos</h3>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">';
       pmsVideos.forEach(function(v) {
         if (v.visible === false) return;
-        const ytId = (v.url||'').match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
-        const embedUrl = ytId ? 'https://www.youtube.com/embed/' + ytId[1] : v.url;
-        html += `<div style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06)"><div style="position:relative;padding-bottom:56.25%;height:0"><iframe src="${embedUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen></iframe></div><div style="padding:10px 14px"><div style="font-weight:600;font-size:13px;color:#1a237e">${v.title || 'Untitled'}</div>${v.tag ? '<span style="background:#e8eaf6;color:#1a237e;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-top:4px;display:inline-block">'+v.tag+'</span>' : ''}</div></div>`;
+        var ytV = (v.url || '').match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+        var embV = ytV ? 'https://www.youtube.com/embed/' + ytV[1] : v.url;
+        html += '<div class="video-card"><div class="video-thumb"><iframe src="' + embV + '" allowfullscreen loading="lazy"></iframe></div><div class="video-info"><h4>' + (v.title || 'Untitled') + '</h4>' + (v.tag ? '<span class="batch-tag">' + v.tag + '</span>' : '') + '</div></div>';
       });
-      html += `</div>`;
+      html += '</div>';
     }
 
     el.innerHTML = html;
   } catch(e) {
-    el.innerHTML = '<h2 class="page-title">Daily Video + Notes</h2><div style="text-align:center;padding:40px;color:#c62828">Failed to load. Make sure PMS is running at ' + API + '</div>';
+    el.innerHTML = '<h2 class="page-title">&#128221; Daily Video + Notes</h2><div class="empty-state"><h3>Failed to load</h3><p>Make sure PMS is running.</p></div>';
   }
+}
+
+function clearNoteForm() {
+  document.getElementById('noteDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('noteCourse').value = '';
+  document.getElementById('noteVideoTitle').value = '';
+  document.getElementById('noteVideoUrl').value = '';
+  document.getElementById('noteText').value = '';
+  document.getElementById('noteError').textContent = '';
+}
+
+async function saveDailyNote() {
+  var date = document.getElementById('noteDate').value;
+  var course = document.getElementById('noteCourse').value;
+  var videoTitle = document.getElementById('noteVideoTitle').value.trim();
+  var videoUrl = document.getElementById('noteVideoUrl').value.trim();
+  var notes = document.getElementById('noteText').value.trim();
+  if (!date) { document.getElementById('noteError').textContent = 'Date is required'; return; }
+  if (!notes && !videoUrl) { document.getElementById('noteError').textContent = 'Enter video URL or notes'; return; }
+  var btn = event.target; btn.disabled = true; btn.textContent = 'Saving...';
+  var noteObj = { date: date, video_url: videoUrl, video_title: videoTitle, course: course, notes: notes, images: [], visible: true };
+  try {
+    var res = await fetch(API + '/api/pms-sync/running-notes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(noteObj) });
+    var r = await res.json();
+    if (r.error) { document.getElementById('noteError').textContent = r.error; btn.disabled = false; btn.textContent = 'Save Note'; return; }
+    showToast('Daily note saved!');
+    renderDailyNotes(document.getElementById('mainContent'));
+  } catch(e) { document.getElementById('noteError').textContent = 'Error: ' + e.message; btn.disabled = false; btn.textContent = 'Save Note'; }
 }
 
 // ===== CATALOG (Student) =====

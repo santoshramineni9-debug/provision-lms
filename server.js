@@ -44,7 +44,7 @@ app.post('/api/auth/register', (req, res) => {
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (exists) return res.status(400).json({ error: 'Email already registered' });
   const userId = uid();
-  db.prepare('INSERT INTO users (user_id, email, password, first_name, last_name, role, phone, status, page_access) VALUES (?,?,?,?,?,?,?,?,?)').run(userId, email, password, first_name, last_name, 'student', phone || null, 'pending', 'my-courses,catalog,my-quizzes,my-invoices,account');
+  db.prepare('INSERT INTO users (user_id, email, password, first_name, last_name, role, phone, status, page_access) VALUES (?,?,?,?,?,?,?,?,?)').run(userId, email, password, first_name, last_name, 'student', phone || null, 'pending', 'my-courses,catalog,admin-videos,daily-notes,my-quizzes,my-invoices,account');
   saveDB();
   res.json({ message: 'Registration successful! Your account is pending admin approval. Please wait for approval before logging in.', status: 'pending' });
 });
@@ -104,7 +104,7 @@ app.post('/api/users', (req, res) => {
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (exists) return res.status(400).json({ error: 'Email already exists' });
   const userId = uid();
-  db.prepare('INSERT INTO users (user_id, email, password, first_name, last_name, role, phone, page_access) VALUES (?,?,?,?,?,?,?,?)').run(userId, email, password, first_name, last_name, role || 'student', phone || null, page_access || 'my-courses,catalog,my-quizzes,my-invoices,account');
+  db.prepare('INSERT INTO users (user_id, email, password, first_name, last_name, role, phone, page_access) VALUES (?,?,?,?,?,?,?,?)').run(userId, email, password, first_name, last_name, role || 'student', phone || null, page_access || 'my-courses,catalog,admin-videos,daily-notes,my-quizzes,my-invoices,account');
   saveDB();
   res.json({ message: 'Student created', user_id: userId });
 });
@@ -788,6 +788,25 @@ app.get('/api/pms-sync/running-notes', async (req, res) => {
     const data = await r.json();
     res.json(data);
   } catch(e) { res.json([]); }
+});
+
+app.post('/api/pms-sync/running-notes', async (req, res) => {
+  try {
+    // Fetch existing notes from PMS
+    const existing = await fetch(PMS_URL + '/api/site-running-notes');
+    const notes = await existing.json();
+    // Append new note
+    const newNote = req.body;
+    notes.push(newNote);
+    // Save back as array
+    const r = await fetch(PMS_URL + '/api/site-running-notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ running_notes: notes })
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.json({ error: 'Failed to save note to PMS: ' + e.message }); }
 });
 
 app.get('/api/pms-sync/pdfs', async (req, res) => {
