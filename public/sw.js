@@ -1,4 +1,4 @@
-const CACHE = 'provision-lms-v2';
+const CACHE = 'provision-lms-v3';
 
 self.addEventListener('install', e => {
   self.skipWaiting();
@@ -7,7 +7,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => Promise.all(
-      keys.filter(k => k !== CACHE).map(k => caches.delete(k))
+      keys.map(k => caches.delete(k))
     ))
   );
   self.clients.claim();
@@ -18,10 +18,17 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  // Never cache API calls - always fetch fresh data
   if (e.request.url.includes('/api/')) {
-    e.respondWith(fetch(e.request).catch(() => caches.match('/index.html')));
+    e.respondWith(fetch(e.request));
     return;
   }
+  // Never cache HTML - always get latest
+  if (e.request.url.includes('.html') || e.request.url.endsWith('/')) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
+  // Cache only static assets (CSS, JS, images)
   e.respondWith(
     fetch(e.request).then(r => {
       const clone = r.clone();
