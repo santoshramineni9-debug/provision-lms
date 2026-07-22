@@ -216,8 +216,56 @@ function initApp() {
 
 function renderNav() {
   const nav = document.getElementById('topnav');
-  const showInstall = currentUser && currentUser.role === 'student';
-  nav.innerHTML = (showInstall ? `<button id="installBtn" onclick="installApp()" style="background:#4361ee;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;align-self:center">&#11015; Install App</button>` : '') + navItems.map(n => `<a class="nav-link" data-page="${n.id}" onclick="showPage('${n.id}')">${n.icon} ${n.label}</a>`).join('') + `<a class="nav-link nav-right" onclick="logout()">Logout</a>`;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const installBtn = !isStandalone ? `<button onclick="installApp()" style="background:linear-gradient(135deg,#4361ee,#7209b7);color:#fff;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;align-self:center;white-space:nowrap">&#11015; Install App</button>` : '';
+  nav.innerHTML = navItems.map(n => `<a class="nav-link" data-page="${n.id}" onclick="showPage('${n.id}')">${n.icon} ${n.label}</a>`).join('') + installBtn + `<a class="nav-link nav-right" onclick="logout()">Logout</a>`;
+  showMobileInstallBanner();
+}
+
+function isMobile() {
+  return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 768);
+}
+
+function isInstallable() {
+  return !window.matchMedia('(display-mode: standalone)').matches && !window.navigator.standalone;
+}
+
+function showMobileInstallBanner() {
+  var old = document.getElementById('mobileInstallBanner');
+  if (old) old.remove();
+  if (!currentUser) return;
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (isStandalone) return;
+  var key = 'lms_install_dismissed_' + currentUser.user_id;
+  if (localStorage.getItem(key)) return;
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  var isAndroid = /Android/.test(navigator.userAgent);
+  var isMob = isMobile();
+  var installHint = '';
+  if (isAndroid) {
+    installHint = 'Tap the <b>3 dots</b> menu in Chrome → <b>Install app</b>';
+  } else if (isIOS) {
+    installHint = 'Tap the <b>Share</b> button in Safari → <b>Add to Home Screen</b>';
+  } else if (!isMob) {
+    installHint = 'Open this URL on your phone to install the app';
+  }
+  var hasNativePrompt = !!deferredPrompt;
+  var banner = document.createElement('div');
+  banner.id = 'mobileInstallBanner';
+  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:linear-gradient(135deg,#4361ee,#3a0ca3);color:#fff;padding:12px 16px;z-index:99998;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 -2px 12px rgba(0,0,0,0.3);font-size:12px;font-family:system-ui,-apple-system,sans-serif';
+  banner.innerHTML = '<div style="flex:1"><div style="font-weight:700;font-size:13px;margin-bottom:2px">&#11015; Install Provision LMS App</div>' +
+    (hasNativePrompt ? '<div style="opacity:0.9">Tap Install to add to your home screen</div>' : (installHint ? '<div style="opacity:0.9">' + installHint + '</div>' : '<div style="opacity:0.9">Open this page on your phone to install</div>')) +
+    '</div><div style="display:flex;gap:6px;flex-shrink:0">' +
+    (hasNativePrompt ? '<button onclick="installApp()" style="background:#fff;color:#4361ee;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:700;font-size:12px">Install</button>' : '') +
+    '<button onclick="dismissInstallBanner()" style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.4);padding:6px 10px;border-radius:6px;cursor:pointer;font-size:11px">Later</button>' +
+    '</div>';
+  document.body.appendChild(banner);
+}
+
+function dismissInstallBanner() {
+  var banner = document.getElementById('mobileInstallBanner');
+  if (banner) banner.remove();
+  if (currentUser) localStorage.setItem('lms_install_dismissed_' + currentUser.user_id, '1');
 }
 
 function showPage(pageId) {
@@ -1864,12 +1912,14 @@ let deferredPrompt;
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredPrompt = e;
+  showMobileInstallBanner();
 });
 function installApp() {
   if (deferredPrompt) {
     deferredPrompt.prompt();
     deferredPrompt.userChoice.then(r => {
       deferredPrompt = null;
+      dismissInstallBanner();
     });
     return;
   }
@@ -1877,15 +1927,16 @@ function installApp() {
   var isAndroid = /Android/.test(navigator.userAgent);
   var msg = '';
   if (isIOS) {
-    msg = '<b>Install on iPhone:</b><br>1. Tap the <b>Share</b> button (&#8984;)<br>2. Scroll down → <b>Add to Home Screen</b><br>3. Tap <b>Add</b>';
+    msg = '<div style="text-align:center"><div style="font-size:32px;margin-bottom:12px">&#128241;</div><b style="font-size:15px">Install on iPhone</b><br><br><ol style="text-align:left;font-size:13px;line-height:2;padding-left:20px"><li>Tap the <b>Share</b> button &#9733; at the bottom</li><li>Scroll down → <b>Add to Home Screen</b></li><li>Tap <b>Add</b></li></ol><br><div style="background:#e8f5e9;padding:8px;border-radius:6px;font-size:11px">The app icon will appear on your home screen</div></div>';
   } else if (isAndroid) {
-    msg = '<b>Install on Android:</b><br>1. Tap the <b>3 dots</b> menu (&#8942;)<br>2. Tap <b>Install app</b> or <b>Add to Home Screen</b>';
+    msg = '<div style="text-align:center"><div style="font-size:32px;margin-bottom:12px">&#128241;</div><b style="font-size:15px">Install on Android</b><br><br><ol style="text-align:left;font-size:13px;line-height:2;padding-left:20px"><li>Tap the <b>3 dots</b> menu &#8942; in Chrome</li><li>Tap <b>Install app</b> or <b>Add to Home Screen</b></li><li>Tap <b>Install</b></li></ol><br><div style="background:#e8f5e9;padding:8px;border-radius:6px;font-size:11px">The app icon will appear on your home screen</div></div>';
   } else {
-    msg = '<b>Install on your phone:</b><br>1. Open this URL on your phone<br>2. The browser will prompt you to install<br><br>Or tap the <b>Share</b> button → <b>Add to Home Screen</b>';
+    var url = window.location.href;
+    msg = '<div style="text-align:center"><div style="font-size:32px;margin-bottom:12px">&#128241;</div><b style="font-size:15px">Install on Your Phone</b><br><br><div style="font-size:13px;line-height:1.6"><p>1. Open this link on your phone:</p><div style="background:#f0f0f0;padding:8px;border-radius:4px;word-break:break-all;font-size:11px;margin:8px 0">' + url + '</div><p>2. On Android: Tap <b>&#8942;</b> → <b>Install app</b></p><p>3. On iPhone: Tap <b>Share</b> → <b>Add to Home Screen</b></p></div></div>';
   }
   var overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center';
-  overlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:24px;max-width:380px;width:90%;text-align:center;font-size:13px;line-height:1.6;box-shadow:0 8px 32px rgba(0,0,0,0.3)">' + msg + '<br><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="margin-top:16px;background:#4361ee;color:#fff;border:none;padding:8px 24px;border-radius:6px;cursor:pointer;font-size:13px">OK</button></div>';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:24px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.3)">' + msg + '<br><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="margin-top:16px;background:#4361ee;color:#fff;border:none;padding:10px 32px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;width:100%">OK, Got It</button></div>';
   document.body.appendChild(overlay);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
 }
