@@ -101,6 +101,32 @@ function guestLogin() {
   initApp();
 }
 
+// ===== AUTO BACKUP / RESTORE (for Render ephemeral storage) =====
+var LMS_BACKUP_KEY = 'lms_data_backup';
+
+async function lmsBackup() {
+  try {
+    var r = await fetch(API + '/api/backup');
+    var data = await r.json();
+    if (data.users && data.users.length > 0) {
+      localStorage.setItem(LMS_BACKUP_KEY, JSON.stringify(data));
+    }
+  } catch(e) {}
+}
+
+async function lmsRestore() {
+  try {
+    var raw = localStorage.getItem(LMS_BACKUP_KEY);
+    if (!raw) return false;
+    var backup = JSON.parse(raw);
+    if (!backup.users || !backup.users.length) return false;
+    var r = await fetch(API + '/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(backup) });
+    var result = await r.json();
+    if (result.ok && result.message.indexOf('skip') < 0) return true;
+    return false;
+  } catch(e) { return false; }
+}
+
 async function doLogin() {
   const email = document.getElementById('loginEmail').value;
   const pw = document.getElementById('loginPassword').value;
@@ -108,11 +134,21 @@ async function doLogin() {
   try {
     const res = await fetch(API + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw }) });
     const data = await res.json();
-    if (data.error) { document.getElementById('loginError').textContent = data.error; return; }
+    if (data.error) {
+      if (data.error === 'Invalid credentials') {
+        var restored = await lmsRestore();
+        if (restored) {
+          document.getElementById('loginError').textContent = 'Data restored from backup. Please login again.';
+          return;
+        }
+      }
+      document.getElementById('loginError').textContent = data.error; return;
+    }
     currentUser = data;
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('mainApp').style.display = 'block';
     initApp();
+    if (currentUser.role === 'admin' || currentUser.role === 'instructor') lmsBackup();
   } catch(e) { document.getElementById('loginError').textContent = 'Connection error'; }
 }
 
@@ -1205,6 +1241,7 @@ async function saveNewStudent() {
   if (r.error) { showToast(r.error, 'error'); return; }
   showToast('Student created');
   renderStudents(document.getElementById('mainContent'));
+  lmsBackup();
 }
 
 async function editStudent(userId) {
@@ -1253,6 +1290,7 @@ async function saveEditStudent(userId) {
   if (r.error) { showToast(r.error, 'error'); return; }
   showToast('Updated');
   renderStudents(document.getElementById('mainContent'));
+  lmsBackup();
 }
 
 async function deactivateStudent(userId) {
@@ -1260,6 +1298,7 @@ async function deactivateStudent(userId) {
   await fetch(API + '/api/users/' + userId, { method: 'DELETE' });
   showToast('Disabled');
   renderStudents(document.getElementById('mainContent'));
+  lmsBackup();
 }
 
 // ===== ENROLLMENTS (Admin) =====
@@ -1412,12 +1451,14 @@ async function approveUser(userId) {
   await fetch(API + '/api/users/' + userId + '/approve', { method: 'PUT' });
   showToast('User approved!');
   renderApproveUsers(document.getElementById('mainContent'));
+  lmsBackup();
 }
 async function denyUser(userId) {
   if (!confirm('Deny this user?')) return;
   await fetch(API + '/api/users/' + userId + '/deny', { method: 'PUT' });
   showToast('User denied', 'error');
   renderApproveUsers(document.getElementById('mainContent'));
+  lmsBackup();
 }
 
 // ===== ADMIN VIDEOS (YouTube Training Videos) =====

@@ -893,10 +893,51 @@ async function start() {
     saveDB();
     console.log('Seeded admin, instructor, students, categories');
   }
-  ['uploads', 'uploads/videos', 'uploads/invoices'].forEach(dir => {
+    ['uploads', 'uploads/videos', 'uploads/invoices'].forEach(dir => {
     const p = path.join(__dirname, dir);
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
   });
+
+  // ===== BACKUP / RESTORE (for Render ephemeral filesystem) =====
+  app.get('/api/backup', (req, res) => {
+    const users = db.prepare('SELECT * FROM users').all();
+    const courses = db.prepare('SELECT * FROM courses').all();
+    const lessons = db.prepare('SELECT * FROM lessons').all();
+    const categories = db.prepare('SELECT * FROM categories').all();
+    const enrollments = db.prepare('SELECT * FROM enrollments').all();
+    const quizzes = db.prepare('SELECT * FROM quizzes').all();
+    const quiz_questions = db.prepare('SELECT * FROM quiz_questions').all();
+    const batch_links = db.prepare('SELECT * FROM batch_links').all();
+    const videos = db.prepare('SELECT * FROM videos').all();
+    const batches = db.prepare('SELECT * FROM batches').all();
+    const lesson_progress = db.prepare('SELECT * FROM lesson_progress').all();
+    const quiz_attempts = db.prepare('SELECT * FROM quiz_attempts').all();
+    res.json({ users, courses, lessons, categories, enrollments, quizzes, quiz_questions, batch_links, videos, batches, lesson_progress, quiz_attempts });
+  });
+
+  app.post('/api/restore', express.json({ limit: '50mb' }), (req, res) => {
+    try {
+      const data = req.body;
+      const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+      if (userCount > 0) return res.json({ ok: true, message: 'Server already has data, skip restore' });
+      const tables = ['users','courses','lessons','categories','enrollments','quizzes','quiz_questions','batch_links','videos','batches','lesson_progress','quiz_attempts'];
+      tables.forEach(t => {
+        if (data[t] && data[t].length) {
+          const cols = Object.keys(data[t][0]);
+          const placeholders = cols.map(() => '?').join(',');
+          const stmt = db.prepare(`INSERT INTO ${t} (${cols.join(',')}) VALUES (${placeholders})`);
+          data[t].forEach(row => {
+            try { stmt.run(...cols.map(c => row[c])); } catch(e) {}
+          });
+        }
+      });
+      saveDB();
+      res.json({ ok: true, message: 'Restored ' + (data.users || []).length + ' users, ' + (data.courses || []).length + ' courses' });
+    } catch(e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.listen(PORT, '0.0.0.0', () => console.log(`LMS running on http://localhost:${PORT}`));
 }
 start().catch(console.error);
